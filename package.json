@@ -1,0 +1,36 @@
+{
+  "name": "git-gardener",
+  "version": "0.1.0",
+  "description": "A CLI tool for managing and pruning git branches",
+  "type": "module",
+  "packageManager": "pnpm@11.0.8",
+  "engines": {
+    "node": ">=26",
+    "pnpm": ">=11"
+  },
+  "bin": {
+    "git-gardener": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "oxlint src tests",
+    "fmt": "oxfmt src tests",
+    "fmt:check": "oxfmt --check src tests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "gunshi": "^0.29.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "oxfmt": "^0.48.0",
+    "oxlint": "^1.63.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}
