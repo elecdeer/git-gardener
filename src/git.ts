@@ -12,27 +12,27 @@ export interface BranchInfo {
   lastCommitMessage: string;
 }
 
-export async function runGit(args: string[], cwd?: string): Promise<string> {
+export const runGit = async (args: string[], cwd?: string): Promise<string> => {
   const { stdout } = await execFileAsync("git", args, {
     cwd: cwd ?? process.cwd(),
     encoding: "utf8",
   });
   return stdout.trim();
-}
+};
 
-export async function getCurrentBranch(cwd?: string): Promise<string> {
+export const getCurrentBranch = async (cwd?: string): Promise<string> => {
   return runGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
-}
+};
 
-export async function getMergedBranches(cwd?: string): Promise<string[]> {
+export const getMergedBranches = async (cwd?: string): Promise<string[]> => {
   const output = await runGit(["branch", "--merged", "HEAD"], cwd);
   return output
     .split("\n")
     .map((line) => line.trim().replace(/^\*\s*/, ""))
     .filter(Boolean);
-}
+};
 
-export async function getLocalBranches(cwd?: string): Promise<BranchInfo[]> {
+export const getLocalBranches = async (cwd?: string): Promise<BranchInfo[]> => {
   const currentBranch = await getCurrentBranch(cwd);
   const mergedBranches = await getMergedBranches(cwd);
 
@@ -58,18 +58,18 @@ export async function getLocalBranches(cwd?: string): Promise<BranchInfo[]> {
       lastCommitMessage,
     };
   });
-}
+};
 
-export async function deleteBranch(branchName: string, force = false, cwd?: string): Promise<void> {
+export const deleteBranch = async (branchName: string, force = false, cwd?: string): Promise<void> => {
   const flag = force ? "-D" : "-d";
   await runGit(["branch", flag, branchName], cwd);
-}
+};
 
-export async function getDefaultBranch(cwd?: string): Promise<string> {
+export const getDefaultBranch = async (cwd?: string): Promise<string> => {
   try {
     const output = await runGit(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd);
     return output.replace("origin/", "");
   } catch {
     return "main";
   }
-}
+};

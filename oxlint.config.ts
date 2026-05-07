@@ -6,5 +6,7 @@ export default defineConfig({
     typeCheck: true,
   },
   categories: {},
-  rules: {},
+  rules: {
+    "func-style": "error",
+  },
 });

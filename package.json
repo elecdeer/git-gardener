@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "typecheck": "tsgo --noEmit"
