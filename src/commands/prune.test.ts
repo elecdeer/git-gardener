@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import * as gitModule from "../../src/git.js";
-import { pruneCommand } from "../../src/commands/prune.js";
+
+import * as gitModule from "../git.js";
+import { pruneCommand } from "./prune.js";
 
 describe("prune command", () => {
   it("should have a name of 'prune'", () => {

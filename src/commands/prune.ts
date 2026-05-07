@@ -1,4 +1,5 @@
 import { define } from "gunshi";
+
 import { deleteBranch, getDefaultBranch, getLocalBranches } from "../git.js";
 
 export const pruneCommand = define({

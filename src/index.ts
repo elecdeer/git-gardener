@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { cli, define } from "gunshi";
+
 import { listCommand } from "./commands/list.js";
 import { pruneCommand } from "./commands/prune.js";
 

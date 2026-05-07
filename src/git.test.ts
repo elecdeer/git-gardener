@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import * as gitModule from "../src/git.js";
+
+import * as gitModule from "./git.js";
 
 describe("git utilities", () => {
   describe("runGit", () => {

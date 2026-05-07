@@ -1,4 +1,5 @@
 import { define } from "gunshi";
+
 import { getCurrentBranch, getLocalBranches } from "../git.js";
 
 export const listCommand = define({

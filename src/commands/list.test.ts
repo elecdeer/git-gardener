@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import * as gitModule from "../../src/git.js";
-import { listCommand } from "../../src/commands/list.js";
+
+import * as gitModule from "../git.js";
+import { listCommand } from "./list.js";
 
 describe("list command", () => {
   it("should have a name of 'list'", () => {
