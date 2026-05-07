@@ -19,7 +19,8 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "gunshi": "^0.29.5"
+    "gunshi": "^0.29.5",
+    "simple-git": "^3.36.0"
   },
   "devDependencies": {
     "@tsdown/exe": "^0.21.10",
