@@ -1,23 +1,36 @@
 #!/usr/bin/env node
 import { cli, define } from "gunshi";
 
-import { listCommand } from "./commands/list.js";
-import { pruneCommand } from "./commands/prune.js";
+const repoCommand = define({
+  name: "repo",
+  description: "ghqライクなリポジトリのクローン・一覧管理",
+  run: async () => {
+    console.log("Use gdn repo --help for usage information.");
+  },
+});
+
+const wtCommand = define({
+  name: "wt",
+  description: "git worktreeの作成・切り替え・削除・整理",
+  run: async () => {
+    console.log("Use gdn wt --help for usage information.");
+  },
+});
 
 const rootCommand = define({
   name: "git-gardener",
-  description: "A CLI tool for managing and pruning git branches",
+  description: "ghq と git worktree を統合したようなリポジトリ管理CLI",
   run: async () => {
     console.log("Use --help for usage information, or run a subcommand.");
   },
 });
 
 await cli(process.argv.slice(2), rootCommand, {
-  name: "git-gardener",
+  name: "gdn",
   version: "0.1.0",
-  description: "A CLI tool for managing and pruning git branches",
+  description: "ghq と git worktree を統合したようなリポジトリ管理CLI",
   subCommands: {
-    list: listCommand,
-    prune: pruneCommand,
+    repo: repoCommand,
+    wt: wtCommand,
   },
 });
