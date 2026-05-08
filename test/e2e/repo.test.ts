@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, writeFile, rm, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { simpleGit } from "simple-git";
@@ -134,5 +135,42 @@ describe("gdn repo clone", () => {
   it("should error if destination already exists", async () => {
     const { stderr } = await gdn(`repo clone ${sourceRepo}`);
     expect(stderr).toContain("already exists");
+  });
+});
+
+describe("gdn repo migrate", () => {
+  let migrantRepo: string;
+
+  beforeAll(async () => {
+    migrantRepo = resolve(testDir, "migrant-repo");
+    await mkdir(migrantRepo, { recursive: true });
+    const git = simpleGit(migrantRepo);
+    await git.init();
+    await git.raw(["remote", "add", "origin", "https://github.com/testuser/migrant.git"]);
+    await writeFile(resolve(migrantRepo, "README.md"), "# Migrant");
+    await git.add("README.md");
+    await git.raw("commit", "-m", "feat: initial");
+    await git.raw(["branch", "-m", "main"]);
+  });
+
+  it("should show dry-run plan", async () => {
+    const { stdout } = await gdn(`repo migrate ${migrantRepo} --dry-run --yes`);
+    expect(stdout).toContain("DRY RUN");
+    expect(stdout).toContain("migrant-repo");
+    expect(stdout).toContain("github.com");
+  });
+
+  it("should migrate a repo to gdn structure", async () => {
+    const { stdout } = await gdn(`repo migrate ${migrantRepo} --yes`);
+    const newPath = stdout.trim();
+    expect(newPath).toContain(gdnRoot);
+    expect(newPath).toContain("github.com/testuser/migrant");
+
+    expect(existsSync(newPath)).toBe(true);
+    expect(existsSync(migrantRepo)).toBe(false);
+
+    const git = simpleGit(newPath);
+    const log = await git.log();
+    expect(log.latest?.message).toContain("feat: initial");
   });
 });
