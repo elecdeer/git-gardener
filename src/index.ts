@@ -12,6 +12,7 @@ import { wtSwitchCommand } from "./commands/wt/switch.js";
 import { wtDeleteCommand } from "./commands/wt/delete.js";
 import { wtPruneCommand } from "./commands/wt/prune.js";
 import { wtMigrateCommand } from "./commands/wt/migrate.js";
+import { completeCommand } from "./commands/complete.js";
 
 const repoCommand = define({
   name: "repo",
@@ -60,5 +61,6 @@ await cli(process.argv.slice(2), rootCommand, {
   subCommands: {
     repo: repoCommand,
     wt: wtCommand,
+    complete: completeCommand,
   },
 });
