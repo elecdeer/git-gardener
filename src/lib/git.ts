@@ -380,7 +380,7 @@ export const getPrunableWorktrees = async (dir: string): Promise<WtInfo[]> => {
     mergedRaw
       .trim()
       .split("\n")
-      .map((line) => line.trim().replace(/^\*\s*/, ""))
+      .map((line) => line.trim().replace(/^[*+]\s*/, ""))
       .filter(Boolean),
   );
 

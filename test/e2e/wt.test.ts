@@ -21,7 +21,6 @@ beforeAll(async () => {
   gitConfigGlobal = resolve(testDir, "gitconfig");
   await writeFile(gitConfigGlobal, `[gdn]\n\troot = ${gdnRoot}\n\tdefaultHost = github.com\n`);
 
-  // Create a main repository under gdn root
   mainRepoDir = resolve(gdnRoot, "github.com", "testuser", "worktree-demo");
   await mkdir(mainRepoDir, { recursive: true });
 
@@ -32,7 +31,7 @@ beforeAll(async () => {
   await git.raw("commit", "-m", "feat: initial commit");
   await git.raw(["branch", "-m", "main"]);
 
-  // Create a worktree
+  // Create a worktree for feature-a
   await git.raw([
     "worktree",
     "add",
@@ -73,12 +72,12 @@ describe("gdn wt list", () => {
   it("should list worktrees in tab-separated format", async () => {
     const { stdout } = await gdn(`wt list -C ${mainRepoDir} --no-color`);
     const lines = stdout.trim().split("\n");
-    expect(lines.length).toBeGreaterThanOrEqual(2); // main + feature-a
+    expect(lines.length).toBeGreaterThanOrEqual(2);
 
     for (const line of lines) {
       const parts = line.split("\t");
       expect(parts.length).toBeGreaterThanOrEqual(4);
-      expect(parts[0]).toBeTruthy(); // branch name
+      expect(parts[0]).toBeTruthy();
     }
   });
 
@@ -100,7 +99,6 @@ describe("gdn wt create", () => {
     expect(wtPath).toBeTruthy();
     expect(wtPath).toContain("feature-b");
 
-    // Verify the worktree exists
     const git = simpleGit(wtPath);
     const isRepo = await git.raw(["rev-parse", "--git-dir"]).catch(() => "");
     expect(isRepo).toBeTruthy();
@@ -109,7 +107,6 @@ describe("gdn wt create", () => {
 
 describe("gdn wt switch", () => {
   it("should switch to an existing worktree", async () => {
-    // feature-a was already created in beforeAll
     const { stdout } = await gdn(`wt switch feature-a -C ${mainRepoDir}`);
     const wtPath = stdout.trim();
     expect(wtPath).toContain("feature-a");
@@ -123,5 +120,38 @@ describe("gdn wt switch", () => {
     const git = simpleGit(wtPath);
     const isRepo = await git.raw(["rev-parse", "--git-dir"]).catch(() => "");
     expect(isRepo).toBeTruthy();
+  });
+});
+
+describe("gdn wt delete", () => {
+  it("should delete a worktree and branch", async () => {
+    const { stdout } = await gdn(`wt delete feature-b -C ${mainRepoDir} --force`);
+    expect(stdout).toContain("Deleted");
+
+    const { stdout: listOut } = await gdn(`wt list -C ${mainRepoDir} --json`);
+    const parsed = JSON.parse(listOut.trim());
+    const found = parsed.find((w: { branch: string }) => w.branch === "feature-b");
+    expect(found).toBeUndefined();
+  });
+
+  it("should refuse to delete default branch", async () => {
+    const { stderr } = await gdn(`wt delete main -C ${mainRepoDir}`);
+    expect(stderr).toContain("cannot delete default branch");
+  });
+});
+
+describe("gdn wt prune", () => {
+  it("should show dry-run output", async () => {
+    const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --dry-run`);
+    expect(stdout).toBeTruthy();
+  });
+
+  it("should prune merged worktrees", async () => {
+    const git = simpleGit(mainRepoDir);
+    await git.raw(["merge", "feature-a"]);
+    await git.raw(["checkout", "main"]);
+
+    const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --yes`);
+    expect(stdout).toContain("Pruned");
   });
 });
