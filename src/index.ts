@@ -3,6 +3,7 @@ import { cli, define } from "gunshi";
 
 import { repoListCommand } from "./commands/repo/list.js";
 import { repoRootCommand } from "./commands/repo/root.js";
+import { repoCloneCommand } from "./commands/repo/clone.js";
 
 const repoCommand = define({
   name: "repo",
@@ -10,6 +11,7 @@ const repoCommand = define({
   subCommands: {
     list: repoListCommand,
     root: repoRootCommand,
+    clone: repoCloneCommand,
   },
   run: async () => {
     console.log("Use gdn repo --help for usage information.");

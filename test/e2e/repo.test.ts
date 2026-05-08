@@ -14,45 +14,29 @@ let gdnRoot: string;
 let gitConfigGlobal: string;
 
 beforeAll(async () => {
-  // Create temp directories
   testDir = await mkdtemp(join(tmpdir(), "gdn-e2e-repo-"));
   gdnRoot = resolve(testDir, "gdn-root");
 
-  // Create a temp git config file for global settings
   gitConfigGlobal = resolve(testDir, "gitconfig");
   await writeFile(gitConfigGlobal, `[gdn]\n\troot = ${gdnRoot}\n\tdefaultHost = github.com\n`);
 
-  // Create sample repos under gdn root structure
-  const repoDir = resolve(gdnRoot, "github.com", "testuser", "myrepo");
-  await mkdir(repoDir, { recursive: true });
+  const setupRepo = async (host: string, owner: string, name: string, msg: string) => {
+    const dir = resolve(gdnRoot, host, owner, name);
+    await mkdir(dir, { recursive: true });
+    const g = simpleGit(dir);
+    await g.init();
+    await writeFile(resolve(dir, "README.md"), `# ${name}`);
+    await g.add("README.md");
+    await g.raw("commit", "-m", msg);
+    await g.raw(["branch", "-m", "main"]);
+  };
 
-  const git = simpleGit(repoDir);
-  await git.init();
-  await writeFile(resolve(repoDir, "README.md"), "# My Repo");
-  await git.add("README.md");
-  await git.commit("feat: initial commit");
-  await git.raw(["branch", "-m", "main"]);
-
-  // Create another repo
-  const repoDir2 = resolve(gdnRoot, "github.com", "testuser", "another-repo");
-  await mkdir(repoDir2, { recursive: true });
-
-  const git2 = simpleGit(repoDir2);
-  await git2.init();
-  await writeFile(resolve(repoDir2, "README.md"), "# Another");
-  await git2.add("README.md");
-  await git2.commit("chore: setup");
-
-  // Create a third repo under a different host
-  const repoDir3 = resolve(gdnRoot, "gitlab.com", "otheruser", "backend");
-  await mkdir(repoDir3, { recursive: true });
-
-  const git3 = simpleGit(repoDir3);
-  await git3.init();
-  await writeFile(resolve(repoDir3, "README.md"), "# Backend");
-  await git3.add("README.md");
-  await git3.commit("feat: backend init");
-}, 30000);
+  await Promise.all([
+    setupRepo("github.com", "testuser", "myrepo", "feat: initial commit"),
+    setupRepo("github.com", "testuser", "another-repo", "chore: setup"),
+    setupRepo("gitlab.com", "otheruser", "backend", "feat: backend init"),
+  ]);
+}, 60000);
 
 afterAll(async () => {
   try {
@@ -66,7 +50,10 @@ const gdn = (args: string): Promise<{ stdout: string; stderr: string }> => {
   return execFileAsync(CLI, args.split(" "), {
     env: { ...process.env, GIT_CONFIG_GLOBAL: gitConfigGlobal },
     encoding: "utf8",
-  });
+  }).catch((err: NodeJS.ErrnoException & { stdout?: string; stderr?: string }) => ({
+    stdout: err.stdout ?? "",
+    stderr: err.stderr ?? err.message ?? "",
+  }));
 };
 
 describe("gdn repo root", () => {
@@ -82,12 +69,11 @@ describe("gdn repo list", () => {
     const lines = stdout.trim().split("\n");
     expect(lines.length).toBe(3);
 
-    // Each line should have tab-separated columns (repo, updateAtRelative)
     for (const line of lines) {
       const parts = line.split("\t");
       expect(parts.length).toBe(2);
-      expect(parts[0]).toBeTruthy(); // repo path
-      expect(parts[1]).toBeTruthy(); // relative time
+      expect(parts[0]).toBeTruthy();
+      expect(parts[1]).toBeTruthy();
     }
   });
 
@@ -115,8 +101,38 @@ describe("gdn repo list", () => {
     expect(lines.length).toBe(1);
     const parts = lines[0]!.split("\t");
     expect(parts.length).toBe(3);
-    expect(parts[0]).toBeTruthy(); // host
-    expect(parts[1]).toBeTruthy(); // owner
-    expect(parts[2]).toBeTruthy(); // name
+    expect(parts[0]).toBeTruthy();
+    expect(parts[1]).toBeTruthy();
+    expect(parts[2]).toBeTruthy();
+  });
+});
+
+describe("gdn repo clone", () => {
+  let sourceRepo: string;
+
+  beforeAll(async () => {
+    sourceRepo = resolve(testDir, "source-repo");
+    await mkdir(sourceRepo, { recursive: true });
+    const git = simpleGit(sourceRepo);
+    await git.init();
+    await writeFile(resolve(sourceRepo, "hello.txt"), "Hello World");
+    await git.add("hello.txt");
+    await git.raw("commit", "-m", "feat: hello");
+    await git.raw(["branch", "-m", "main"]);
+  });
+
+  it("should clone a local repository", async () => {
+    const { stdout } = await gdn(`repo clone ${sourceRepo}`);
+    const clonedPath = stdout.trim();
+    expect(clonedPath).toContain(gdnRoot);
+
+    const git = simpleGit(clonedPath);
+    const log = await git.log();
+    expect(log.latest?.message).toContain("feat: hello");
+  });
+
+  it("should error if destination already exists", async () => {
+    const { stderr } = await gdn(`repo clone ${sourceRepo}`);
+    expect(stderr).toContain("already exists");
   });
 });
