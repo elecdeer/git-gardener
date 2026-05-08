@@ -340,36 +340,6 @@ export const switchWorktree = async (
   return addWorktree(dir, branch, wtDir, baseBranch);
 };
 
-export const deleteWorktree = async (dir: string, branch: string, force?: boolean): Promise<void> => {
-  const git = simpleGit(dir);
-
-  // Find the worktree path
-  const worktrees = await getWtInfos(dir);
-  const wt = worktrees.find((w) => w.branch === branch);
-  if (!wt) {
-    throw new Error(`Worktree for branch '${branch}' not found`);
-  }
-
-  // Check if it's the main/default branch
-  if (wt.isMain) {
-    throw new Error(`Cannot delete default branch worktree: ${branch}`);
-  }
-
-  const args = ["worktree", "remove"];
-  if (force) args.push("--force");
-  args.push(wt.path);
-
-  await git.raw(args);
-
-  // Also delete the branch
-  try {
-    const branchDeleteFlag = force ? "-D" : "-d";
-    await git.raw(["branch", branchDeleteFlag, branch]);
-  } catch {
-    // Branch might already be deleted
-  }
-};
-
 export const getPrunableWorktrees = async (dir: string): Promise<WtInfo[]> => {
   const worktrees = await getWtInfos(dir);
 
@@ -387,11 +357,6 @@ export const getPrunableWorktrees = async (dir: string): Promise<WtInfo[]> => {
   return worktrees.filter((wt) => !wt.isMain && mergedBranches.has(wt.branch));
 };
 
-export const moveDirectory = async (src: string, dest: string): Promise<void> => {
-  const { rename } = await import("node:fs/promises");
-  await rename(src, dest);
-};
-
 export const isBareRepo = async (dir: string): Promise<boolean> => {
   try {
     const git = simpleGit(dir);
@@ -400,21 +365,6 @@ export const isBareRepo = async (dir: string): Promise<boolean> => {
   } catch {
     return false;
   }
-};
-
-export const getBranchList = async (
-  dir: string,
-): Promise<Array<{ name: string; isCurrent: boolean }>> => {
-  const git = simpleGit(dir);
-  const raw = await git.raw(["for-each-ref", "--format=%(refname:short)|%(HEAD)", "refs/heads/"]);
-  return raw
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [name, head] = line.split("|");
-      return { name: name ?? "", isCurrent: head === "*" };
-    });
 };
 
 export const runPostCloneHooks = async (hooks: string[], cwd: string): Promise<void> => {

@@ -25,13 +25,6 @@ export const formatRelativeTime = (timestamp: number): string => {
   return `${seconds} second${seconds !== 1 ? "s" : ""} ago`;
 };
 
-export const formatTracking = (ahead: number, behind: number): string => {
-  const parts: string[] = [];
-  if (ahead > 0) parts.push(`\u21e1${ahead}`);
-  if (behind > 0) parts.push(`\u21e3${behind}`);
-  return parts.join(" ");
-};
-
 const ANSI_COLORS: Record<string, string> = {
   green: "\x1b[32m",
   yellow: "\x1b[33m",

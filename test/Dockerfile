@@ -1,7 +1,7 @@
 FROM node:26-slim
 
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-RUN corepack enable
+RUN npm install -g pnpm@11
 
 WORKDIR /app
 
