@@ -5,6 +5,8 @@ import { repoListCommand } from "./commands/repo/list.js";
 import { repoRootCommand } from "./commands/repo/root.js";
 import { repoCloneCommand } from "./commands/repo/clone.js";
 import { repoMigrateCommand } from "./commands/repo/migrate.js";
+import { wtListCommand } from "./commands/wt/list.js";
+import { wtRootCommand } from "./commands/wt/root.js";
 
 const repoCommand = define({
   name: "repo",
@@ -23,6 +25,10 @@ const repoCommand = define({
 const wtCommand = define({
   name: "wt",
   description: "git worktreeの作成・切り替え・削除・整理",
+  subCommands: {
+    list: wtListCommand,
+    root: wtRootCommand,
+  },
   run: async () => {
     console.log("Use gdn wt --help for usage information.");
   },
