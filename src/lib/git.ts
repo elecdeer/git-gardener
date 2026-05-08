@@ -302,9 +302,10 @@ const getUpstreamInfo = async (git: SimpleGit, branch: string): Promise<Upstream
   }
 };
 
-export const createWorktree = async (
+export const addWorktree = async (
   dir: string,
   branch: string,
+  wtDir: string,
   baseBranch?: string,
 ): Promise<string> => {
   const git = simpleGit(dir);
@@ -316,7 +317,6 @@ export const createWorktree = async (
     args.push("-b", branch);
   }
 
-  const wtDir = resolve(`${dir}.wt`, branch);
   args.push(wtDir);
 
   await git.raw(args);
@@ -326,9 +326,9 @@ export const createWorktree = async (
 export const switchWorktree = async (
   dir: string,
   branch: string,
+  wtBasedir: string,
   baseBranch?: string,
 ): Promise<string> => {
-  // Check if worktree already exists
   const existing = await getWtInfos(dir);
   const found = existing.find((wt) => wt.branch === branch);
 
@@ -336,8 +336,8 @@ export const switchWorktree = async (
     return found.path;
   }
 
-  // Create new worktree
-  return createWorktree(dir, branch, baseBranch);
+  const wtDir = resolve(wtBasedir, branch);
+  return addWorktree(dir, branch, wtDir, baseBranch);
 };
 
 export const deleteWorktree = async (dir: string, branch: string, force?: boolean): Promise<void> => {

@@ -92,3 +92,36 @@ describe("gdn wt list", () => {
     expect(parsed[0]).toHaveProperty("hash");
   });
 });
+
+describe("gdn wt create", () => {
+  it("should create a new worktree", async () => {
+    const { stdout } = await gdn(`wt create feature-b -C ${mainRepoDir}`);
+    const wtPath = stdout.trim();
+    expect(wtPath).toBeTruthy();
+    expect(wtPath).toContain("feature-b");
+
+    // Verify the worktree exists
+    const git = simpleGit(wtPath);
+    const isRepo = await git.raw(["rev-parse", "--git-dir"]).catch(() => "");
+    expect(isRepo).toBeTruthy();
+  });
+});
+
+describe("gdn wt switch", () => {
+  it("should switch to an existing worktree", async () => {
+    // feature-a was already created in beforeAll
+    const { stdout } = await gdn(`wt switch feature-a -C ${mainRepoDir}`);
+    const wtPath = stdout.trim();
+    expect(wtPath).toContain("feature-a");
+  });
+
+  it("should create and switch to a new worktree", async () => {
+    const { stdout } = await gdn(`wt switch feature-c -C ${mainRepoDir}`);
+    const wtPath = stdout.trim();
+    expect(wtPath).toContain("feature-c");
+
+    const git = simpleGit(wtPath);
+    const isRepo = await git.raw(["rev-parse", "--git-dir"]).catch(() => "");
+    expect(isRepo).toBeTruthy();
+  });
+});

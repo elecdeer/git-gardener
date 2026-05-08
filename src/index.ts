@@ -7,6 +7,8 @@ import { repoCloneCommand } from "./commands/repo/clone.js";
 import { repoMigrateCommand } from "./commands/repo/migrate.js";
 import { wtListCommand } from "./commands/wt/list.js";
 import { wtRootCommand } from "./commands/wt/root.js";
+import { wtCreateCommand } from "./commands/wt/create.js";
+import { wtSwitchCommand } from "./commands/wt/switch.js";
 
 const repoCommand = define({
   name: "repo",
@@ -28,6 +30,8 @@ const wtCommand = define({
   subCommands: {
     list: wtListCommand,
     root: wtRootCommand,
+    create: wtCreateCommand,
+    switch: wtSwitchCommand,
   },
   run: async () => {
     console.log("Use gdn wt --help for usage information.");
