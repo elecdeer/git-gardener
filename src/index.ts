@@ -11,6 +11,7 @@ import { wtCreateCommand } from "./commands/wt/create.js";
 import { wtSwitchCommand } from "./commands/wt/switch.js";
 import { wtDeleteCommand } from "./commands/wt/delete.js";
 import { wtPruneCommand } from "./commands/wt/prune.js";
+import { wtMigrateCommand } from "./commands/wt/migrate.js";
 
 const repoCommand = define({
   name: "repo",
@@ -36,6 +37,7 @@ const wtCommand = define({
     switch: wtSwitchCommand,
     delete: wtDeleteCommand,
     prune: wtPruneCommand,
+    migrate: wtMigrateCommand,
   },
   run: async () => {
     console.log("Use gdn wt --help for usage information.");

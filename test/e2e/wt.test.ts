@@ -31,7 +31,6 @@ beforeAll(async () => {
   await git.raw("commit", "-m", "feat: initial commit");
   await git.raw(["branch", "-m", "main"]);
 
-  // Create a worktree for feature-a
   await git.raw([
     "worktree",
     "add",
@@ -153,5 +152,12 @@ describe("gdn wt prune", () => {
 
     const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --yes`);
     expect(stdout).toContain("Pruned");
+  });
+});
+
+describe("gdn wt migrate", () => {
+  it("should show dry-run output", async () => {
+    const { stdout } = await gdn(`wt migrate -C ${mainRepoDir} --dry-run`);
+    expect(stdout).toBeTruthy();
   });
 });
