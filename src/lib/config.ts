@@ -102,5 +102,8 @@ const expandWtBasedir = (basedir: string, gitDirName?: string): string => {
   if (gitDirName !== undefined) {
     expanded = expanded.replace(/\{gitroot\}/g, gitDirName);
   }
+  if (expanded.startsWith("~")) {
+    return resolve(homedir(), expanded.slice(2));
+  }
   return expanded;
 };
