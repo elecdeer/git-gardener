@@ -81,12 +81,7 @@ export const repoCloneCommand = define({
     },
   },
   run: async (ctx) => {
-    const { url: rawUrl, shallow, branch, submodules } = ctx.values as {
-      url: string;
-      shallow: boolean;
-      branch: string;
-      submodules: boolean;
-    };
+    const { url: rawUrl, shallow, branch, submodules } = ctx.values;
 
     const config = new GdnConfig();
     const [root, defaultHost] = await Promise.all([config.getRoot(), config.getDefaultHost()]);

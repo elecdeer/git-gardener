@@ -83,15 +83,7 @@ export const wtListCommand = define({
       "no-color": noColor,
       json,
       dir,
-    } = ctx.values as {
-      column: string;
-      sort: string;
-      reverse: boolean;
-      limit: string;
-      "no-color": boolean;
-      json: boolean;
-      dir: string;
-    };
+    } = ctx.values;
 
     const repoPath = resolve(dir || process.cwd());
     const worktrees = await getWtInfos(repoPath);

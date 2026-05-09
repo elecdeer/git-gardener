@@ -69,14 +69,7 @@ export const repoListCommand = define({
     },
   },
   run: async (ctx) => {
-    const { column, sort, reverse, limit, "no-color": noColor, json } = ctx.values as {
-      column: string;
-      sort: string;
-      reverse: boolean;
-      limit: string;
-      "no-color": boolean;
-      json: boolean;
-    };
+    const { column, sort, reverse, limit, "no-color": noColor, json } = ctx.values;
 
     const config = new GdnConfig();
     const root = await config.getRoot();

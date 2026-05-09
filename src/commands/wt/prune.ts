@@ -27,11 +27,7 @@ export const wtPruneCommand = define({
     },
   },
   run: async (ctx) => {
-    const { "dry-run": dryRun, yes, dir } = ctx.values as {
-      "dry-run": boolean;
-      yes: boolean;
-      dir: string;
-    };
+    const { "dry-run": dryRun, yes, dir } = ctx.values;
 
     const repoPath = resolve(dir || process.cwd());
     const git = simpleGit(repoPath);

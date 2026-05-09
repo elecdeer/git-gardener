@@ -14,7 +14,7 @@ export const wtRootCommand = define({
     },
   },
   run: async (ctx) => {
-    const { dir } = ctx.values as { dir: string };
+    const { dir } = ctx.values;
     const repoPath = resolve(dir || process.cwd());
     const repoName = basename(repoPath);
 

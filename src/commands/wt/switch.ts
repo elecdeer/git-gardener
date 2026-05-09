@@ -25,11 +25,7 @@ export const wtSwitchCommand = define({
     },
   },
   run: async (ctx) => {
-    const { branch, base, dir } = ctx.values as {
-      branch: string;
-      base: string;
-      dir: string;
-    };
+    const { branch, base, dir } = ctx.values;
 
     const repoPath = resolve(dir || process.cwd());
     const repoName = basename(repoPath);

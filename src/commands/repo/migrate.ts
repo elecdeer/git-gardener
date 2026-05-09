@@ -95,7 +95,7 @@ export const repoMigrateCommand = define({
       path: rawPath,
       "dry-run": dryRun,
       yes,
-    } = ctx.values as { path: string; "dry-run": boolean; yes: boolean };
+    } = ctx.values;
 
     const sourcePath = resolve(rawPath || process.cwd());
 

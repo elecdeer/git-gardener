@@ -26,11 +26,7 @@ export const wtDeleteCommand = define({
     },
   },
   run: async (ctx) => {
-    const { branch, force, dir } = ctx.values as {
-      branch: string;
-      force: boolean;
-      dir: string;
-    };
+    const { branch, force, dir } = ctx.values;
 
     const repoPath = resolve(dir || process.cwd());
     const git = simpleGit(repoPath);
