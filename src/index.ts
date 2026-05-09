@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { cli, define } from "gunshi";
+import completion from "@gunshi/plugin-completion";
 
 import { repoListCommand } from "./commands/repo/list.js";
 import { repoRootCommand } from "./commands/repo/root.js";
@@ -12,7 +13,6 @@ import { wtSwitchCommand } from "./commands/wt/switch.js";
 import { wtDeleteCommand } from "./commands/wt/delete.js";
 import { wtPruneCommand } from "./commands/wt/prune.js";
 import { wtMigrateCommand } from "./commands/wt/migrate.js";
-import { completeCommand } from "./commands/complete.js";
 
 const repoCommand = define({
   name: "repo",
@@ -61,6 +61,6 @@ await cli(process.argv.slice(2), rootCommand, {
   subCommands: {
     repo: repoCommand,
     wt: wtCommand,
-    complete: completeCommand,
   },
+  plugins: [completion()],
 });

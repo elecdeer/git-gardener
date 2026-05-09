@@ -19,6 +19,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@gunshi/plugin-completion": "^0.29.5",
     "gunshi": "^0.29.5",
     "simple-git": "^3.36.0"
   },
