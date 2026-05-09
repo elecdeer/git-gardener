@@ -57,54 +57,91 @@ const gdn = (args: string): Promise<{ stdout: string; stderr: string }> => {
   }));
 };
 
+/**
+ * テスト実行ごとに変わる動的な値をプレースホルダーに置換する
+ */
+const normalize = (str: string): string =>
+  str
+    .replaceAll(testDir, "<testDir>")
+    .replace(/\b[0-9a-f]{7}\b/g, "<hash>")
+    .replace(/just now|\d+ (second|minute|hour|day)s? ago/g, "<time>")
+    .replace(/\d{10,13}/g, "<timestamp>");
+
 describe("gdn repo root", () => {
   it("should output the resolved gdn root path", async () => {
     const { stdout } = await gdn("repo root");
-    expect(stdout.trim()).toBe(gdnRoot);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root"`);
   });
 });
 
 describe("gdn repo list", () => {
   it("should list repositories in tab-separated format", async () => {
-    const { stdout } = await gdn("repo list --no-color");
-    const lines = stdout.trim().split("\n");
-    expect(lines.length).toBe(3);
-
-    for (const line of lines) {
-      const parts = line.split("\t");
-      expect(parts.length).toBe(2);
-      expect(parts[0]).toBeTruthy();
-      expect(parts[1]).toBeTruthy();
-    }
+    const { stdout } = await gdn("repo list --no-color --sort repo --reverse");
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "github.com/testuser/another-repo	<time>
+      github.com/testuser/myrepo	<time>
+      gitlab.com/otheruser/backend	<time>"
+    `);
   });
 
   it("should filter by --limit", async () => {
-    const { stdout } = await gdn("repo list --limit 1 --no-color");
-    const lines = stdout.trim().split("\n");
-    expect(lines.length).toBe(1);
+    const { stdout } = await gdn("repo list --limit 1 --no-color --sort repo --reverse");
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"github.com/testuser/another-repo	<time>"`);
   });
 
   it("should output JSON with --json", async () => {
-    const { stdout } = await gdn("repo list --json");
-    const parsed = JSON.parse(stdout.trim());
-    expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed.length).toBeGreaterThanOrEqual(2);
-    expect(parsed[0]).toHaveProperty("repo");
-    expect(parsed[0]).toHaveProperty("host");
-    expect(parsed[0]).toHaveProperty("owner");
+    const { stdout } = await gdn("repo list --json --sort repo --reverse");
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "[
+        {
+          "repo": "github.com/testuser/another-repo",
+          "host": "github.com",
+          "owner": "testuser",
+          "name": "another-repo",
+          "path": "<testDir>/gdn-root/github.com/testuser/another-repo",
+          "branch": "main",
+          "worktreeCount": 1,
+          "commitMessage": "chore: setup",
+          "updateAt": <timestamp>,
+          "updateAtRelative": "<time>"
+        },
+        {
+          "repo": "github.com/testuser/myrepo",
+          "host": "github.com",
+          "owner": "testuser",
+          "name": "myrepo",
+          "path": "<testDir>/gdn-root/github.com/testuser/myrepo",
+          "branch": "main",
+          "worktreeCount": 1,
+          "commitMessage": "feat: initial commit",
+          "updateAt": <timestamp>,
+          "updateAtRelative": "<time>"
+        },
+        {
+          "repo": "gitlab.com/otheruser/backend",
+          "host": "gitlab.com",
+          "owner": "otheruser",
+          "name": "backend",
+          "path": "<testDir>/gdn-root/gitlab.com/otheruser/backend",
+          "branch": "main",
+          "worktreeCount": 1,
+          "commitMessage": "feat: backend init",
+          "updateAt": <timestamp>,
+          "updateAtRelative": "<time>"
+        }
+      ]"
+    `);
   });
 
   it("should support custom columns with --column", async () => {
     const { stdout } = await gdn(
-      "repo list --column host,owner,name --no-color --limit 1",
+      "repo list --column host,owner,name --no-color --sort repo --reverse",
     );
-    const lines = stdout.trim().split("\n");
-    expect(lines.length).toBe(1);
-    const parts = lines[0]!.split("\t");
-    expect(parts.length).toBe(3);
-    expect(parts[0]).toBeTruthy();
-    expect(parts[1]).toBeTruthy();
-    expect(parts[2]).toBeTruthy();
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "github.com	testuser	another-repo
+      github.com	testuser	myrepo
+      gitlab.com	otheruser	backend"
+    `);
   });
 });
 
@@ -125,16 +162,17 @@ describe("gdn repo clone", () => {
   it("should clone a local repository", async () => {
     const { stdout } = await gdn(`repo clone ${sourceRepo}`);
     const clonedPath = stdout.trim();
-    expect(clonedPath).toContain(gdnRoot);
 
     const git = simpleGit(clonedPath);
     const log = await git.log();
     expect(log.latest?.message).toContain("feat: hello");
+
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root/localhost/local/source-repo"`);
   });
 
   it("should error if destination already exists", async () => {
     const { stderr } = await gdn(`repo clone ${sourceRepo}`);
-    expect(stderr).toContain("already exists");
+    expect(normalize(stderr.trim())).toMatchInlineSnapshot(`"Error: destination already exists: <testDir>/gdn-root/localhost/local/source-repo"`);
   });
 });
 
@@ -155,16 +193,22 @@ describe("gdn repo migrate", () => {
 
   it("should show dry-run plan", async () => {
     const { stdout } = await gdn(`repo migrate ${migrantRepo} --dry-run --yes`);
-    expect(stdout).toContain("DRY RUN");
-    expect(stdout).toContain("migrant-repo");
-    expect(stdout).toContain("github.com");
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "[DRY RUN] Would move:
+        <testDir>/migrant-repo
+        → <testDir>/gdn-root/github.com/testuser/migrant
+      Config migrations:
+        Skip ghq.root → gdn.root: gdn.root already set
+        Skip wt.basedir → gdn.wtBasedir: gdn.wtBasedir already set
+        Skip wt.hook → gdn.wtHook: gdn.wtHook already set
+        Skip wt.deleteHook → gdn.wtDeleteHook: gdn.wtDeleteHook already set
+        Skip wt.remover → gdn.wtRemover: gdn.wtRemover already set"
+    `);
   });
 
   it("should migrate a repo to gdn structure", async () => {
     const { stdout } = await gdn(`repo migrate ${migrantRepo} --yes`);
     const newPath = stdout.trim();
-    expect(newPath).toContain(gdnRoot);
-    expect(newPath).toContain("github.com/testuser/migrant");
 
     expect(existsSync(newPath)).toBe(true);
     expect(existsSync(migrantRepo)).toBe(false);
@@ -172,5 +216,7 @@ describe("gdn repo migrate", () => {
     const git = simpleGit(newPath);
     const log = await git.log();
     expect(log.latest?.message).toContain("feat: initial");
+
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/migrant"`);
   });
 });

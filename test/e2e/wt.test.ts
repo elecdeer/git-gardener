@@ -58,36 +58,68 @@ const gdn = (args: string): Promise<{ stdout: string; stderr: string }> => {
   }));
 };
 
+/**
+ * テスト実行ごとに変わる動的な値をプレースホルダーに置換する
+ */
+const normalize = (str: string): string =>
+  str
+    .replaceAll(testDir, "<testDir>")
+    .replace(/\b[0-9a-f]{7}\b/g, "<hash>")
+    .replace(/just now|\d+ (second|minute|hour|day)s? ago/g, "<time>")
+    .replace(/\d{10,13}/g, "<timestamp>");
+
 describe("gdn wt root", () => {
   it("should output the wt basedir", async () => {
     const { stdout } = await gdn(`wt root -C ${mainRepoDir}`);
-    const wtDir = stdout.trim();
-    expect(wtDir).toBeTruthy();
-    expect(wtDir.endsWith("worktree-demo.wt")).toBe(true);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/worktree-demo.wt"`);
   });
 });
 
 describe("gdn wt list", () => {
   it("should list worktrees in tab-separated format", async () => {
-    const { stdout } = await gdn(`wt list -C ${mainRepoDir} --no-color`);
-    const lines = stdout.trim().split("\n");
-    expect(lines.length).toBeGreaterThanOrEqual(2);
-
-    for (const line of lines) {
-      const parts = line.split("\t");
-      expect(parts.length).toBeGreaterThanOrEqual(4);
-      expect(parts[0]).toBeTruthy();
-    }
+    const { stdout } = await gdn(`wt list -C ${mainRepoDir} --no-color --sort branch --reverse`);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "feature-a	/private<testDir>/feature-a	<hash>	<time>	
+      main	/private<testDir>/gdn-root/github.com/testuser/worktree-demo	<hash>	<time>"
+    `);
   });
 
   it("should support --json output", async () => {
-    const { stdout } = await gdn(`wt list -C ${mainRepoDir} --json`);
-    const parsed = JSON.parse(stdout.trim());
-    expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed.length).toBeGreaterThanOrEqual(2);
-    expect(parsed[0]).toHaveProperty("branch");
-    expect(parsed[0]).toHaveProperty("path");
-    expect(parsed[0]).toHaveProperty("hash");
+    const { stdout } = await gdn(`wt list -C ${mainRepoDir} --json --sort branch --reverse`);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "[
+        {
+          "branch": "feature-a",
+          "path": "/private<testDir>/feature-a",
+          "hash": "<hash>",
+          "upstream": "",
+          "ahead": 0,
+          "behind": 0,
+          "tracking": "",
+          "commitMessage": "feat: initial commit",
+          "status": "clean",
+          "isMain": false,
+          "isCurrent": false,
+          "updateAt": <timestamp>,
+          "updateAtRelative": "<time>"
+        },
+        {
+          "branch": "main",
+          "path": "/private<testDir>/gdn-root/github.com/testuser/worktree-demo",
+          "hash": "<hash>",
+          "upstream": "",
+          "ahead": 0,
+          "behind": 0,
+          "tracking": "",
+          "commitMessage": "feat: initial commit",
+          "status": "clean",
+          "isMain": true,
+          "isCurrent": true,
+          "updateAt": <timestamp>,
+          "updateAtRelative": "<time>"
+        }
+      ]"
+    `);
   });
 });
 
@@ -95,37 +127,37 @@ describe("gdn wt create", () => {
   it("should create a new worktree", async () => {
     const { stdout } = await gdn(`wt create feature-b -C ${mainRepoDir}`);
     const wtPath = stdout.trim();
-    expect(wtPath).toBeTruthy();
-    expect(wtPath).toContain("feature-b");
 
     const git = simpleGit(wtPath);
     const isRepo = await git.raw(["rev-parse", "--git-dir"]).catch(() => "");
     expect(isRepo).toBeTruthy();
+
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-b"`);
   });
 });
 
 describe("gdn wt switch", () => {
   it("should switch to an existing worktree", async () => {
     const { stdout } = await gdn(`wt switch feature-a -C ${mainRepoDir}`);
-    const wtPath = stdout.trim();
-    expect(wtPath).toContain("feature-a");
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"/private<testDir>/feature-a"`);
   });
 
   it("should create and switch to a new worktree", async () => {
     const { stdout } = await gdn(`wt switch feature-c -C ${mainRepoDir}`);
     const wtPath = stdout.trim();
-    expect(wtPath).toContain("feature-c");
 
     const git = simpleGit(wtPath);
     const isRepo = await git.raw(["rev-parse", "--git-dir"]).catch(() => "");
     expect(isRepo).toBeTruthy();
+
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-c"`);
   });
 });
 
 describe("gdn wt delete", () => {
   it("should delete a worktree and branch", async () => {
     const { stdout } = await gdn(`wt delete feature-b -C ${mainRepoDir} --force`);
-    expect(stdout).toContain("Deleted");
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"Deleted worktree and branch: feature-b"`);
 
     const { stdout: listOut } = await gdn(`wt list -C ${mainRepoDir} --json`);
     const parsed = JSON.parse(listOut.trim());
@@ -135,14 +167,18 @@ describe("gdn wt delete", () => {
 
   it("should refuse to delete default branch", async () => {
     const { stderr } = await gdn(`wt delete main -C ${mainRepoDir}`);
-    expect(stderr).toContain("cannot delete default branch");
+    expect(normalize(stderr.trim())).toMatchInlineSnapshot(`"Error: cannot delete default branch worktree: main"`);
   });
 });
 
 describe("gdn wt prune", () => {
   it("should show dry-run output", async () => {
     const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --dry-run`);
-    expect(stdout).toBeTruthy();
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "[DRY RUN] Would prune these branches:
+        feature-a (/private<testDir>/feature-a)
+        feature-c (/private<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-c)"
+    `);
   });
 
   it("should prune merged worktrees", async () => {
@@ -151,13 +187,17 @@ describe("gdn wt prune", () => {
     await git.raw(["checkout", "main"]);
 
     const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --yes`);
-    expect(stdout).toContain("Pruned");
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "Pruned: feature-a
+      Pruned: feature-c
+      Pruned 2 worktree(s)."
+    `);
   });
 });
 
 describe("gdn wt migrate", () => {
   it("should show dry-run output", async () => {
     const { stdout } = await gdn(`wt migrate -C ${mainRepoDir} --dry-run`);
-    expect(stdout).toBeTruthy();
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"All worktrees are already in the correct location."`);
   });
 });
