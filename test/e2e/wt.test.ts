@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, writeFile, rm, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { simpleGit } from "simple-git";
@@ -66,7 +67,10 @@ const normalize = (str: string): string =>
     .replaceAll(testDir, "<testDir>")
     .replace(/\b[0-9a-f]{7}\b/g, "<hash>")
     .replace(/just now|\d+ (second|minute|hour|day)s? ago/g, "<time>")
-    .replace(/\d{10,13}/g, "<timestamp>");
+    .replace(/\d{10,13}/g, "<timestamp>")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n");
 
 describe("gdn wt root", () => {
   it("should output the wt basedir", async () => {
@@ -79,9 +83,26 @@ describe("gdn wt list", () => {
   it("should list worktrees in tab-separated format", async () => {
     const { stdout } = await gdn(`wt list -C ${mainRepoDir} --no-color --sort branch --reverse`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
-      "feature-a	/private<testDir>/feature-a	<hash>	<time>	
+      "feature-a	/private<testDir>/feature-a	<hash>	<time>
       main	/private<testDir>/gdn-root/github.com/testuser/worktree-demo	<hash>	<time>"
     `);
+  });
+
+  it("should support --column option to select specific fields", async () => {
+    const { stdout } = await gdn(
+      `wt list -C ${mainRepoDir} --no-color --sort branch --reverse --column branch,hash`,
+    );
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "feature-a	<hash>
+      main	<hash>"
+    `);
+  });
+
+  it("should support --limit option", async () => {
+    const { stdout } = await gdn(
+      `wt list -C ${mainRepoDir} --no-color --sort branch --reverse --limit 1`,
+    );
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"feature-a	/private<testDir>/feature-a	<hash>	<time>"`);
   });
 
   it("should support --json output", async () => {
@@ -134,6 +155,21 @@ describe("gdn wt create", () => {
 
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-b"`);
   });
+
+  it("should create a worktree from a specific base branch", async () => {
+    const { stdout, stderr } = await gdn(`wt create feature-based -C ${mainRepoDir} --base main`);
+    expect(stderr).toBe("");
+
+    const wtPath = stdout.trim();
+    const git = simpleGit(wtPath);
+    const branch = await git.raw(["rev-parse", "--abbrev-ref", "HEAD"]);
+    expect(branch.trim()).toBe("feature-based");
+
+    expect(normalize(wtPath)).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-based"`);
+
+    // cleanup: delete the worktree so it doesn't affect subsequent prune tests
+    await gdn(`wt delete feature-based -C ${mainRepoDir} --force`);
+  });
 });
 
 describe("gdn wt switch", () => {
@@ -169,6 +205,11 @@ describe("gdn wt delete", () => {
     const { stderr } = await gdn(`wt delete main -C ${mainRepoDir}`);
     expect(normalize(stderr.trim())).toMatchInlineSnapshot(`"Error: cannot delete default branch worktree: main"`);
   });
+
+  it("should error when the specified branch worktree does not exist", async () => {
+    const { stderr } = await gdn(`wt delete no-such-branch -C ${mainRepoDir}`);
+    expect(normalize(stderr.trim())).toMatchInlineSnapshot(`"Error: worktree for branch 'no-such-branch' not found"`);
+  });
 });
 
 describe("gdn wt prune", () => {
@@ -193,11 +234,57 @@ describe("gdn wt prune", () => {
       Pruned 2 worktree(s)."
     `);
   });
+
+  it("should output nothing-to-prune message when no merged worktrees remain", async () => {
+    // All non-main worktrees have been pruned by the previous test
+    const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --dry-run`);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"No worktrees to prune."`);
+  });
 });
 
 describe("gdn wt migrate", () => {
   it("should show dry-run output", async () => {
     const { stdout } = await gdn(`wt migrate -C ${mainRepoDir} --dry-run`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"All worktrees are already in the correct location."`);
+  });
+});
+
+describe("gdn wt migrate (worktrees out of place)", () => {
+  let migrateRepo: string;
+
+  beforeAll(async () => {
+    migrateRepo = resolve(gdnRoot, "github.com", "testuser", "migrate-wt-demo");
+    await mkdir(migrateRepo, { recursive: true });
+
+    const git = simpleGit(migrateRepo);
+    await git.init();
+    await writeFile(resolve(migrateRepo, "README.md"), "# Migrate WT Demo");
+    await git.add("README.md");
+    await git.raw("commit", "-m", "feat: initial");
+    await git.raw(["branch", "-m", "main"]);
+
+    // Create a worktree in a non-standard location (outside the expected basedir)
+    await git.raw(["worktree", "add", "-b", "feature-x", resolve(testDir, "out-of-place-wt")]);
+  });
+
+  it("should show dry-run plan for misplaced worktrees", async () => {
+    const { stdout } = await gdn(`wt migrate -C ${migrateRepo} --dry-run`);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "[DRY RUN] Would move:
+        /private<testDir>/out-of-place-wt
+        → <testDir>/gdn-root/github.com/testuser/migrate-wt-demo.wt/feature-x"
+    `);
+  });
+
+  it("should migrate worktrees to the correct basedir location", async () => {
+    const { stdout } = await gdn(`wt migrate -C ${migrateRepo} --yes`);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
+      "Moved: feature-x → <testDir>/gdn-root/github.com/testuser/migrate-wt-demo.wt/feature-x
+      Migrated 1 worktree(s)."
+    `);
+
+    const expectedPath = resolve(migrateRepo, "..", "migrate-wt-demo.wt", "feature-x");
+    expect(existsSync(expectedPath)).toBe(true);
+    expect(existsSync(resolve(testDir, "out-of-place-wt"))).toBe(false);
   });
 });

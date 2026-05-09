@@ -65,7 +65,10 @@ const normalize = (str: string): string =>
     .replaceAll(testDir, "<testDir>")
     .replace(/\b[0-9a-f]{7}\b/g, "<hash>")
     .replace(/just now|\d+ (second|minute|hour|day)s? ago/g, "<time>")
-    .replace(/\d{10,13}/g, "<timestamp>");
+    .replace(/\d{10,13}/g, "<timestamp>")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n");
 
 describe("gdn repo root", () => {
   it("should output the resolved gdn root path", async () => {
@@ -218,5 +221,42 @@ describe("gdn repo migrate", () => {
     expect(log.latest?.message).toContain("feat: initial");
 
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/migrant"`);
+  });
+
+  it("should report when repo is already in the correct location", async () => {
+    // migrantRepo was moved to gdnRoot/.../migrant by the previous test
+    const migratedPath = resolve(gdnRoot, "github.com", "testuser", "migrant");
+    const { stderr } = await gdn(`repo migrate ${migratedPath} --yes`);
+    expect(normalize(stderr.trim())).toMatchInlineSnapshot(`"Repository is already in the correct location."`);
+  });
+
+  it("should error when repo has no remote origin", async () => {
+    const noRemoteDir = resolve(testDir, "no-remote-repo");
+    await mkdir(noRemoteDir, { recursive: true });
+    const git = simpleGit(noRemoteDir);
+    await git.init();
+    await writeFile(resolve(noRemoteDir, "file.txt"), "content");
+    await git.add("file.txt");
+    await git.raw("commit", "-m", "initial");
+    await git.raw(["branch", "-m", "main"]);
+
+    const { stderr } = await gdn(`repo migrate ${noRemoteDir} --yes`);
+    expect(normalize(stderr.trim())).toMatchInlineSnapshot(`"Error: Cannot parse remote URL:"`);
+  });
+
+  it("should error when destination already exists", async () => {
+    // Create a repo whose remote points to github.com/testuser/myrepo — which already exists in gdnRoot
+    const conflictDir = resolve(testDir, "conflict-repo");
+    await mkdir(conflictDir, { recursive: true });
+    const git = simpleGit(conflictDir);
+    await git.init();
+    await git.raw(["remote", "add", "origin", "https://github.com/testuser/myrepo.git"]);
+    await writeFile(resolve(conflictDir, "file.txt"), "content");
+    await git.add("file.txt");
+    await git.raw("commit", "-m", "initial");
+    await git.raw(["branch", "-m", "main"]);
+
+    const { stderr } = await gdn(`repo migrate ${conflictDir} --yes`);
+    expect(normalize(stderr.trim())).toMatchInlineSnapshot(`"Error: destination already exists: <testDir>/gdn-root/github.com/testuser/myrepo"`);
   });
 });

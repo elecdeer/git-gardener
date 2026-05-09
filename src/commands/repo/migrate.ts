@@ -110,8 +110,23 @@ export const repoMigrateCommand = define({
     const config = new GdnConfig(sourcePath);
     const [root, defaultHost] = await Promise.all([config.getRoot(), config.getDefaultHost()]);
 
-    const remoteUrl = await getRemoteUrl(sourcePath);
-    const { host, owner, name } = parseRemoteUrl(remoteUrl, defaultHost);
+    let remoteUrl: string;
+    try {
+      remoteUrl = await getRemoteUrl(sourcePath);
+    } catch (err) {
+      process.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    }
+
+    let host: string;
+    let owner: string;
+    let name: string;
+    try {
+      ({ host, owner, name } = parseRemoteUrl(remoteUrl, defaultHost));
+    } catch (err) {
+      process.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    }
 
     const destPath = resolve(root, host, owner, name);
 

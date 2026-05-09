@@ -309,15 +309,12 @@ export const addWorktree = async (
   baseBranch?: string,
 ): Promise<string> => {
   const git = simpleGit(dir);
-  const args = ["worktree", "add"];
+  // git worktree add -b <branch> <path> [<commit-ish>]
+  const args = ["worktree", "add", "-b", branch, wtDir];
 
   if (baseBranch) {
-    args.push("-b", branch, "--track", baseBranch);
-  } else {
-    args.push("-b", branch);
+    args.push(baseBranch);
   }
-
-  args.push(wtDir);
 
   await git.raw(args);
   return resolve(wtDir);
