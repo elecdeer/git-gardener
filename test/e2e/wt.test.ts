@@ -14,6 +14,7 @@ let testDir: string;
 let gdnRoot: string;
 let gitConfigGlobal: string;
 let mainRepoDir: string;
+let remoteRepoDir: string;
 
 beforeAll(async () => {
   testDir = await mkdtemp(join(tmpdir(), "gdn-e2e-wt-"));
@@ -25,12 +26,19 @@ beforeAll(async () => {
   mainRepoDir = resolve(gdnRoot, "github.com", "testuser", "worktree-demo");
   await mkdir(mainRepoDir, { recursive: true });
 
+  // prune がリモートの gone 判定を使うので、bare リポジトリを origin として用意する
+  remoteRepoDir = resolve(testDir, "remote.git");
+  await mkdir(remoteRepoDir, { recursive: true });
+  await simpleGit(remoteRepoDir).raw(["init", "--bare", "--initial-branch=main"]);
+
   const git = simpleGit(mainRepoDir);
   await git.init();
   await writeFile(resolve(mainRepoDir, "README.md"), "# Worktree Demo");
   await git.add("README.md");
   await git.raw("commit", "-m", "feat: initial commit");
   await git.raw(["branch", "-m", "main"]);
+  await git.raw(["remote", "add", "origin", remoteRepoDir]);
+  await git.raw(["push", "-u", "origin", "main"]);
 
   await git.raw([
     "worktree",
@@ -128,7 +136,7 @@ describe("gdn wt list", () => {
           "branch": "main",
           "path": "/private<testDir>/gdn-root/github.com/testuser/worktree-demo",
           "hash": "<hash>",
-          "upstream": "",
+          "upstream": "origin/main",
           "ahead": 0,
           "behind": 0,
           "tracking": "",
@@ -213,6 +221,18 @@ describe("gdn wt delete", () => {
 });
 
 describe("gdn wt prune", () => {
+  beforeAll(async () => {
+    // feature-a / feature-c を origin に push して upstream を張り、
+    // リモートから ref を削除することで `[gone]` 状態を作る
+    const git = simpleGit(mainRepoDir);
+    await git.raw(["push", "-u", "origin", "feature-a"]);
+    await git.raw(["push", "-u", "origin", "feature-c"]);
+
+    const remoteGit = simpleGit(remoteRepoDir);
+    await remoteGit.raw(["branch", "-D", "feature-a"]);
+    await remoteGit.raw(["branch", "-D", "feature-c"]);
+  });
+
   it("should show dry-run output", async () => {
     const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --dry-run`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
@@ -222,11 +242,7 @@ describe("gdn wt prune", () => {
     `);
   });
 
-  it("should prune merged worktrees", async () => {
-    const git = simpleGit(mainRepoDir);
-    await git.raw(["merge", "feature-a"]);
-    await git.raw(["checkout", "main"]);
-
+  it("should prune worktrees whose upstream branch was deleted on the remote", async () => {
     const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --yes`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
       "Pruned: feature-a
@@ -235,7 +251,7 @@ describe("gdn wt prune", () => {
     `);
   });
 
-  it("should output nothing-to-prune message when no merged worktrees remain", async () => {
+  it("should output nothing-to-prune message when no gone-upstream worktrees remain", async () => {
     // All non-main worktrees have been pruned by the previous test
     const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --dry-run`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"No worktrees to prune."`);

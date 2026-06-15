@@ -25,14 +25,19 @@ export const wtPruneCommand = define({
       default: "",
       description: "対象リポジトリのパス",
     },
+    "no-fetch": {
+      type: "boolean",
+      default: false,
+      description: "判定前の git fetch --all --prune を行わない",
+    },
   },
   run: async (ctx) => {
-    const { "dry-run": dryRun, yes, dir } = ctx.values;
+    const { "dry-run": dryRun, yes, dir, "no-fetch": noFetch } = ctx.values;
 
     const repoPath = resolve(dir || process.cwd());
     const git = simpleGit(repoPath);
 
-    const prunable = await getPrunableWorktrees(repoPath);
+    const prunable = await getPrunableWorktrees(repoPath, { fetch: !noFetch });
 
     if (prunable.length === 0) {
       process.stdout.write("No worktrees to prune.\n");

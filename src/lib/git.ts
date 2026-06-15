@@ -337,21 +337,40 @@ export const switchWorktree = async (
   return addWorktree(dir, branch, wtDir, baseBranch);
 };
 
-export const getPrunableWorktrees = async (dir: string): Promise<WtInfo[]> => {
-  const worktrees = await getWtInfos(dir);
-
-  // Get merged branches
+/**
+ * リモートで削除済み（upstream gone）のブランチを持つ worktree を返す。
+ * `fetch` が true の場合は `git fetch --all --prune` を先に実行する。
+ */
+export const getPrunableWorktrees = async (
+  dir: string,
+  options: { fetch?: boolean } = {},
+): Promise<WtInfo[]> => {
+  const { fetch = true } = options;
   const git = simpleGit(dir);
-  const mergedRaw = await git.raw(["branch", "--merged", "HEAD"]);
-  const mergedBranches = new Set(
-    mergedRaw
-      .trim()
-      .split("\n")
-      .map((line) => line.trim().replace(/^[*+]\s*/, ""))
-      .filter(Boolean),
-  );
 
-  return worktrees.filter((wt) => !wt.isMain && mergedBranches.has(wt.branch));
+  if (fetch) {
+    try {
+      await git.raw(["fetch", "--all", "--prune"]);
+    } catch {
+      // fetch の失敗（オフライン等）は致命的にしない。
+      // 既存の追跡情報で判定を続行する。
+    }
+  }
+
+  const refRaw = await git.raw([
+    "for-each-ref",
+    "--format=%(refname:short) %(upstream:track)",
+    "refs/heads",
+  ]);
+  const goneBranches = new Set<string>();
+  for (const line of refRaw.split("\n")) {
+    if (!line.includes("[gone]")) continue;
+    const branch = line.split(" ", 1)[0];
+    if (branch) goneBranches.add(branch);
+  }
+
+  const worktrees = await getWtInfos(dir);
+  return worktrees.filter((wt) => !wt.isMain && goneBranches.has(wt.branch));
 };
 
 export const isBareRepo = async (dir: string): Promise<boolean> => {
