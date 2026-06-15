@@ -8,6 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "tsdown",
+    "build:release": "tsdown --config tsdown.release.config.ts",
     "dev": "tsx src/index.ts",
     "start": "./build/index",
     "test": "vitest run",
