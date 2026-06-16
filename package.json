@@ -1,6 +1,6 @@
 {
   "name": "git-gardener",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A CLI tool for managing and pruning git branches",
   "bin": {
     "git-gardener": "./build/index"
