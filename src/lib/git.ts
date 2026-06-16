@@ -302,6 +302,30 @@ const getUpstreamInfo = async (git: SimpleGit, branch: string): Promise<Upstream
   }
 };
 
+/**
+ * ブランチがローカルに存在するか確認する。
+ */
+const localBranchExists = async (git: SimpleGit, branch: string): Promise<boolean> => {
+  try {
+    await git.raw(["rev-parse", "--verify", `refs/heads/${branch}`]);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * リモートトラッキングブランチが存在するか確認する。
+ */
+const remoteBranchExists = async (git: SimpleGit, branch: string): Promise<boolean> => {
+  try {
+    const result = await git.raw(["branch", "-r", "--list", `*/${branch}`]);
+    return result.trim().length > 0;
+  } catch {
+    return false;
+  }
+};
+
 export const addWorktree = async (
   dir: string,
   branch: string,
@@ -309,11 +333,21 @@ export const addWorktree = async (
   baseBranch?: string,
 ): Promise<string> => {
   const git = simpleGit(dir);
-  // git worktree add -b <branch> <path> [<commit-ish>]
-  const args = ["worktree", "add", "-b", branch, wtDir];
 
-  if (baseBranch) {
-    args.push(baseBranch);
+  const isLocal = await localBranchExists(git, branch);
+  const isRemote = !isLocal && (await remoteBranchExists(git, branch));
+
+  let args: string[];
+  if (isRemote) {
+    // リモートにのみ存在する場合は -b なしで実行。
+    // git がリモートトラッキングブランチを元にローカルブランチを自動作成する。
+    args = ["worktree", "add", wtDir, branch];
+  } else {
+    // ローカルに存在しない新規ブランチを作成する場合は -b を使う。
+    args = ["worktree", "add", "-b", branch, wtDir];
+    if (baseBranch) {
+      args.push(baseBranch);
+    }
   }
 
   await git.raw(args);
