@@ -8,5 +8,6 @@ export default defineConfig({
   categories: {},
   rules: {
     "func-style": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
   },
 });
