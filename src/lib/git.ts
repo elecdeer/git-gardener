@@ -342,15 +342,21 @@ export const addWorktree = async (
     // リモートにのみ存在する場合は -b なしで実行。
     // git がリモートトラッキングブランチを元にローカルブランチを自動作成する。
     args = ["worktree", "add", wtDir, branch];
+    await git.raw(args);
   } else {
     // ローカルに存在しない新規ブランチを作成する場合は -b を使う。
     args = ["worktree", "add", "-b", branch, wtDir];
     if (baseBranch) {
       args.push(baseBranch);
+      // baseBranch 指定時は branch.autoSetupMerge=false を渡し、
+      // 新ブランチが派生元の upstream（例: origin/main）を継承しないようにする。
+      const gitNoTrack = simpleGit({ baseDir: dir, config: ["branch.autoSetupMerge=false"] });
+      await gitNoTrack.raw(args);
+    } else {
+      await git.raw(args);
     }
   }
 
-  await git.raw(args);
   return resolve(wtDir);
 };
 

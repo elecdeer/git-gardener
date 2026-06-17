@@ -173,6 +173,12 @@ describe("gdn wt create", () => {
     const branch = await git.raw(["rev-parse", "--abbrev-ref", "HEAD"]);
     expect(branch.trim()).toBe("feature-based");
 
+    // baseBranch 指定時に派生元の upstream を継承しないことを確認
+    const upstream = await git
+      .raw(["rev-parse", "--abbrev-ref", "feature-based@{upstream}"])
+      .catch(() => "");
+    expect(upstream.trim()).toBe("");
+
     expect(normalize(wtPath)).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-based"`);
 
     // cleanup: delete the worktree so it doesn't affect subsequent prune tests
