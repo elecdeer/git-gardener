@@ -1,7 +1,7 @@
 import { define } from "gunshi";
 import { resolve, basename } from "node:path";
 import { GdnConfig } from "../../lib/config.js";
-import { switchWorktree } from "../../lib/git.js";
+import { switchWorktree, getMainWorktreePath } from "../../lib/git.js";
 
 export const wtSwitchCommand = define({
   name: "switch",
@@ -27,7 +27,7 @@ export const wtSwitchCommand = define({
   run: async (ctx) => {
     const { branch, base, dir } = ctx.values;
 
-    const repoPath = resolve(dir || process.cwd());
+    const repoPath = await getMainWorktreePath(resolve(dir || process.cwd()));
     const repoName = basename(repoPath);
 
     const config = new GdnConfig(repoPath);

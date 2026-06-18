@@ -1,7 +1,7 @@
 import { define } from "gunshi";
 import { resolve, basename } from "node:path";
 import { GdnConfig } from "../../lib/config.js";
-import { addWorktree } from "../../lib/git.js";
+import { addWorktree, getMainWorktreePath } from "../../lib/git.js";
 
 export const wtCreateCommand = define({
   name: "create",
@@ -27,7 +27,7 @@ export const wtCreateCommand = define({
   run: async (ctx) => {
     const { branch, base, dir } = ctx.values;
 
-    const repoPath = resolve(dir || process.cwd());
+    const repoPath = await getMainWorktreePath(resolve(dir || process.cwd()));
     const repoName = basename(repoPath);
 
     const config = new GdnConfig(repoPath);

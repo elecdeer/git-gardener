@@ -360,6 +360,17 @@ export const addWorktree = async (
   return resolve(wtDir);
 };
 
+/**
+ * 指定パスが属するリポジトリのメイン worktree パスを返す。
+ * worktree 内から実行した場合でも正しいメインリポジトリのパスを返す。
+ */
+export const getMainWorktreePath = async (dir: string): Promise<string> => {
+  const git = simpleGit(dir);
+  const raw = await git.raw(["worktree", "list", "--porcelain"]);
+  const entries = parseWorktreePorcelain(raw);
+  return entries[0]?.path ?? dir;
+};
+
 export const switchWorktree = async (
   dir: string,
   branch: string,

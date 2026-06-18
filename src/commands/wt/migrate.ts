@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { rename, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { GdnConfig } from "../../lib/config.js";
-import { getWtInfos, isBareRepo } from "../../lib/git.js";
+import { getWtInfos, isBareRepo, getMainWorktreePath } from "../../lib/git.js";
 
 export const wtMigrateCommand = define({
   name: "migrate",
@@ -31,7 +31,7 @@ export const wtMigrateCommand = define({
   run: async (ctx) => {
     const { "dry-run": dryRun, yes, dir } = ctx.values;
 
-    const repoPath = resolve(dir || process.cwd());
+    const repoPath = await getMainWorktreePath(resolve(dir || process.cwd()));
     const repoName = basename(repoPath);
 
     const config = new GdnConfig(repoPath);
