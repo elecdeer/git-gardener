@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, writeFile, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, mkdir, realpath } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,7 +17,8 @@ let mainRepoDir: string;
 let remoteRepoDir: string;
 
 beforeAll(async () => {
-  testDir = await mkdtemp(join(tmpdir(), "gdn-e2e-wt-"));
+  // realpath で解決することで macOS の /tmp → /private/tmp シンボリックリンクを吸収する
+  testDir = await realpath(await mkdtemp(join(tmpdir(), "gdn-e2e-wt-")));
   gdnRoot = resolve(testDir, "gdn-root");
 
   gitConfigGlobal = resolve(testDir, "gitconfig");
@@ -91,8 +92,8 @@ describe("gdn wt list", () => {
   it("should list worktrees in tab-separated format", async () => {
     const { stdout } = await gdn(`wt list -C ${mainRepoDir} --no-color --sort branch --reverse`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
-      "feature-a	/private<testDir>/feature-a	<hash>	<time>
-      main	/private<testDir>/gdn-root/github.com/testuser/worktree-demo	<hash>	<time>"
+      "feature-a	<testDir>/feature-a	<hash>	<time>
+      main	<testDir>/gdn-root/github.com/testuser/worktree-demo	<hash>	<time>"
     `);
   });
 
@@ -110,7 +111,7 @@ describe("gdn wt list", () => {
     const { stdout } = await gdn(
       `wt list -C ${mainRepoDir} --no-color --sort branch --reverse --limit 1`,
     );
-    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"feature-a	/private<testDir>/feature-a	<hash>	<time>"`);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"feature-a	<testDir>/feature-a	<hash>	<time>"`);
   });
 
   it("should support --json output", async () => {
@@ -119,7 +120,7 @@ describe("gdn wt list", () => {
       "[
         {
           "branch": "feature-a",
-          "path": "/private<testDir>/feature-a",
+          "path": "<testDir>/feature-a",
           "hash": "<hash>",
           "upstream": "",
           "ahead": 0,
@@ -134,7 +135,7 @@ describe("gdn wt list", () => {
         },
         {
           "branch": "main",
-          "path": "/private<testDir>/gdn-root/github.com/testuser/worktree-demo",
+          "path": "<testDir>/gdn-root/github.com/testuser/worktree-demo",
           "hash": "<hash>",
           "upstream": "origin/main",
           "ahead": 0,
@@ -189,7 +190,7 @@ describe("gdn wt create", () => {
 describe("gdn wt switch", () => {
   it("should switch to an existing worktree", async () => {
     const { stdout } = await gdn(`wt switch feature-a -C ${mainRepoDir}`);
-    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"/private<testDir>/feature-a"`);
+    expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/feature-a"`);
   });
 
   it("should create and switch to a new worktree", async () => {
@@ -243,8 +244,8 @@ describe("gdn wt prune", () => {
     const { stdout } = await gdn(`wt prune -C ${mainRepoDir} --dry-run`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
       "[DRY RUN] Would prune these branches:
-        feature-a (/private<testDir>/feature-a)
-        feature-c (/private<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-c)"
+        feature-a (<testDir>/feature-a)
+        feature-c (<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-c)"
     `);
   });
 
@@ -293,7 +294,7 @@ describe("gdn wt migrate (worktrees out of place)", () => {
     const { stdout } = await gdn(`wt migrate -C ${migrateRepo} --dry-run`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`
       "[DRY RUN] Would move:
-        /private<testDir>/out-of-place-wt
+        <testDir>/out-of-place-wt
         → <testDir>/gdn-root/github.com/testuser/migrate-wt-demo.wt/feature-x"
     `);
   });
