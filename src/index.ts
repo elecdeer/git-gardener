@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { cli, define } from "gunshi";
+import pkg from "../package.json" with { type: "json" };
 import completion from "@gunshi/plugin-completion";
 
 import { repoListCommand } from "./commands/repo/list.js";
@@ -72,7 +73,7 @@ const rootCommand = define({
 try {
   await cli(process.argv.slice(2), rootCommand, {
     name: "gdn",
-    version: "0.1.0",
+    version: pkg.version,
     description: "ghq と git worktree を統合したようなリポジトリ管理CLI",
     renderHeader: null,
     subCommands: {

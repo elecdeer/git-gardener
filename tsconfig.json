@@ -13,7 +13,8 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
     "allowImportingTsExtensions": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
   "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
