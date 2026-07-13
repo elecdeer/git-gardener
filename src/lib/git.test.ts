@@ -1,14 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, test, expect, vi, beforeEach } from "vitest";
 
 const mockRaw = vi.fn();
+const mockEnv = vi.fn();
+const mockGit = {
+  raw: mockRaw,
+  env: mockEnv,
+};
+mockEnv.mockReturnValue(mockGit);
 
 vi.mock("simple-git", () => ({
-  simpleGit: vi.fn(() => ({
-    raw: mockRaw,
-  })),
+  simpleGit: vi.fn(() => mockGit),
 }));
 
-import { getMainWorktreePath, addWorktree } from "./git.ts";
+import { getMainWorktreePath, addWorktree, switchWorktree } from "./git.ts";
 
 // git worktree list --porcelain の出力フォーマットを生成するヘルパー
 const porcelain = (
@@ -25,7 +29,7 @@ describe("getMainWorktreePath", () => {
     vi.clearAllMocks();
   });
 
-  it("worktree 内から実行してもメインリポジトリのパスを返す", async () => {
+  test("worktree 内から実行してもメインリポジトリのパスを返す", async () => {
     mockRaw.mockResolvedValue(
       porcelain([
         { path: "/project", hash: "abc1234", branch: "main" },
@@ -38,7 +42,7 @@ describe("getMainWorktreePath", () => {
     expect(result).toBe("/project");
   });
 
-  it("メイン worktree から実行した場合はそのパスをそのまま返す", async () => {
+  test("メイン worktree から実行した場合はそのパスをそのまま返す", async () => {
     mockRaw.mockResolvedValue(
       porcelain([{ path: "/project", hash: "abc1234", branch: "main" }]),
     );
@@ -48,7 +52,7 @@ describe("getMainWorktreePath", () => {
     expect(result).toBe("/project");
   });
 
-  it("worktree が複数あってもリストの先頭（メイン）を返す", async () => {
+  test("worktree が複数あってもリストの先頭（メイン）を返す", async () => {
     mockRaw.mockResolvedValue(
       porcelain([
         { path: "/project", hash: "abc1234", branch: "main" },
@@ -61,6 +65,48 @@ describe("getMainWorktreePath", () => {
 
     expect(result).toBe("/project");
   });
+
+  test("読み取り専用 Git コマンドでは optional lock を無効化する", async () => {
+    mockRaw.mockResolvedValue(
+      porcelain([{ path: "/project", hash: "abc1234", branch: "main" }]),
+    );
+
+    await getMainWorktreePath("/project");
+
+    expect(mockEnv).toHaveBeenCalledWith(
+      expect.objectContaining({ GIT_OPTIONAL_LOCKS: "0" }),
+    );
+  });
+});
+
+describe("switchWorktree", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("既存 worktree の検索では status を実行しない", async () => {
+    mockRaw.mockResolvedValue(
+      porcelain([
+        { path: "/project", hash: "abc1234", branch: "main" },
+        {
+          path: "/project.wt/feat/existing",
+          hash: "def5678",
+          branch: "feat/existing",
+        },
+      ]),
+    );
+
+    const result = await switchWorktree(
+      "/project",
+      "feat/existing",
+      "/project.wt",
+    );
+
+    expect({ result, calls: mockRaw.mock.calls }).toStrictEqual({
+      result: "/project.wt/feat/existing",
+      calls: [[["worktree", "list", "--porcelain"]]],
+    });
+  });
 });
 
 describe("addWorktree", () => {
@@ -68,7 +114,7 @@ describe("addWorktree", () => {
     vi.clearAllMocks();
   });
 
-  it("ローカルにもリモートにも存在しない場合は -b で新規ブランチを作成する", async () => {
+  test("ローカルにもリモートにも存在しない場合は optional lock を無効化せず -b で新規ブランチを作成する", async () => {
     mockRaw.mockImplementation(async (args: string[]) => {
       if (args[0] === "rev-parse") throw new Error("not a valid ref");
       if (args[0] === "branch") return "";
@@ -84,9 +130,10 @@ describe("addWorktree", () => {
       "feat/new",
       "/project.wt/feat/new",
     ]);
+    expect(mockEnv).not.toHaveBeenCalled();
   });
 
-  it("ローカルにもリモートにも存在しない場合に baseBranch を分岐元として渡す", async () => {
+  test("ローカルにもリモートにも存在しない場合に baseBranch を分岐元として渡す", async () => {
     mockRaw.mockImplementation(async (args: string[]) => {
       if (args[0] === "rev-parse") throw new Error("not a valid ref");
       if (args[0] === "branch") return "";
@@ -105,7 +152,7 @@ describe("addWorktree", () => {
     ]);
   });
 
-  it("リモートにのみ存在する場合は -b なしで worktree を作成する", async () => {
+  test("リモートにのみ存在する場合は -b なしで worktree を作成する", async () => {
     mockRaw.mockImplementation(async (args: string[]) => {
       if (args[0] === "rev-parse") throw new Error("not a valid ref");
       if (args[0] === "branch") return "  origin/feat/remote\n";
@@ -123,7 +170,7 @@ describe("addWorktree", () => {
     expect(mockRaw).not.toHaveBeenCalledWith(expect.arrayContaining(["-b"]));
   });
 
-  it("リモートにのみ存在する場合は baseBranch を無視する", async () => {
+  test("リモートにのみ存在する場合は baseBranch を無視する", async () => {
     mockRaw.mockImplementation(async (args: string[]) => {
       if (args[0] === "rev-parse") throw new Error("not a valid ref");
       if (args[0] === "branch") return "  origin/feat/remote\n";
@@ -146,7 +193,7 @@ describe("addWorktree", () => {
     ]);
   });
 
-  it("ローカルに存在する場合はリモート確認をスキップして -b で作成する", async () => {
+  test("ローカルに存在する場合はリモート確認をスキップして -b で作成する", async () => {
     mockRaw.mockImplementation(async (args: string[]) => {
       if (args[0] === "rev-parse") return "abc1234\n";
       return "";

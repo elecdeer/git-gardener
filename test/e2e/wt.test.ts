@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, test, expect, beforeAll, afterAll } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, writeFile, rm, mkdir, realpath } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, rm, mkdir, realpath, stat, utimes } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -58,9 +58,12 @@ afterAll(async () => {
   }
 });
 
-const gdn = (args: string): Promise<{ stdout: string; stderr: string }> => {
+const gdn = (
+  args: string,
+  env: NodeJS.ProcessEnv = {},
+): Promise<{ stdout: string; stderr: string }> => {
   return execFileAsync(CLI, args.split(" "), {
-    env: { ...process.env, GIT_CONFIG_GLOBAL: gitConfigGlobal },
+    env: { ...process.env, ...env, GIT_CONFIG_GLOBAL: gitConfigGlobal },
     encoding: "utf8",
   }).catch((err: NodeJS.ErrnoException & { stdout?: string; stderr?: string }) => ({
     stdout: err.stdout ?? "",
@@ -89,6 +92,34 @@ describe("gdn wt root", () => {
 });
 
 describe("gdn wt list", () => {
+  test("index を更新せず index.lock も作成しない", async () => {
+    const indexPath = resolve(mainRepoDir, ".git", "index");
+    const trackedFile = resolve(mainRepoDir, "README.md");
+    const tracePath = resolve(testDir, "wt-list-trace.json");
+    const before = await stat(indexPath);
+    const future = new Date(Date.now() + 60_000);
+    await utimes(trackedFile, future, future);
+
+    const { stderr } = await gdn(`wt list -C ${mainRepoDir} --json`, {
+      GIT_TRACE2_EVENT: tracePath,
+    });
+
+    const after = await stat(indexPath);
+    const trace = await readFile(tracePath, "utf8");
+    const indexLockEvents = trace
+      .split("\n")
+      .filter((line) => line.includes('"label":"do_write_index"') && line.includes("index.lock"));
+    expect({
+      stderr,
+      indexMtimeChanged: after.mtimeMs !== before.mtimeMs,
+      indexLockEvents,
+    }).toStrictEqual({
+      stderr: "",
+      indexMtimeChanged: false,
+      indexLockEvents: [],
+    });
+  });
+
   it("should list worktrees in tab-separated format", async () => {
     const { stdout } = await gdn(`wt list -C ${mainRepoDir} --no-color --sort branch --reverse`);
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`

@@ -29,6 +29,24 @@ export interface WtInfo {
   updateAt: number;
 }
 
+export interface WorktreeEntry {
+  path: string;
+  branch: string;
+  hash: string;
+}
+
+const readOnlyGit = (dir: string): SimpleGit => {
+  const git = simpleGit(dir);
+  const env: Record<string, string> = { GIT_OPTIONAL_LOCKS: "0" };
+  for (const [name, value] of Object.entries(process.env)) {
+    if (name.startsWith("GIT_TRACE2") && value !== undefined) {
+      env[name] = value;
+    }
+  }
+  git.env(env);
+  return git;
+};
+
 export const formatTracking = (ahead: number, behind: number): string => {
   const parts: string[] = [];
   if (ahead > 0) parts.push(`\u21e1${ahead}`);
@@ -82,7 +100,7 @@ const isGitRepo = async (dir: string): Promise<boolean> => {
 
 const getRepoInfo = async (dir: string, repoPath: string): Promise<RepoInfo | null> => {
   try {
-    const git = simpleGit(dir);
+    const git = readOnlyGit(dir);
     const [branchResult, logResult, worktreeResult] = await Promise.all([
       git.raw(["rev-parse", "--abbrev-ref", "HEAD"]),
       git.log({ maxCount: 1 }),
@@ -140,21 +158,18 @@ export const cloneRepo = async (
 };
 
 export const getWtInfos = async (dir: string): Promise<WtInfo[]> => {
-  const git = simpleGit(dir);
   const worktrees: WtInfo[] = [];
 
   try {
-    const raw = await git.raw(["worktree", "list", "--porcelain"]);
-    const entries = parseWorktreePorcelain(raw);
+    const entries = await getWorktreeEntries(dir);
 
     const defaultBranch = await getDefaultBranch(dir);
     const currentWt = await getCurrentWorktree(dir);
 
     for (const entry of entries) {
-      const info = await getWtInfo(git, entry.path, entry.branch, entry.hash, {
+      const info = await getWtInfo(entry.path, entry.branch, entry.hash, {
         defaultBranch,
         isCurrent: entry.path === currentWt,
-        mainRepoDir: dir,
       });
       if (info) worktrees.push(info);
     }
@@ -164,12 +179,6 @@ export const getWtInfos = async (dir: string): Promise<WtInfo[]> => {
 
   return worktrees;
 };
-
-interface WorktreeEntry {
-  path: string;
-  branch: string;
-  hash: string;
-}
 
 const parseWorktreePorcelain = (raw: string): WorktreeEntry[] => {
   const entries: WorktreeEntry[] = [];
@@ -203,15 +212,25 @@ const parseWorktreePorcelain = (raw: string): WorktreeEntry[] => {
   return entries;
 };
 
+export const getWorktreeEntries = async (dir: string): Promise<WorktreeEntry[]> => {
+  try {
+    const git = readOnlyGit(dir);
+    const raw = await git.raw(["worktree", "list", "--porcelain"]);
+    return parseWorktreePorcelain(raw);
+  } catch {
+    return [];
+  }
+};
+
 const getDefaultBranch = async (dir: string): Promise<string> => {
   try {
-    const git = simpleGit(dir);
+    const git = readOnlyGit(dir);
     const result = await git.raw(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
     return result.trim().replace("origin/", "");
   } catch {
     try {
       // Fallback: check init.defaultBranch config
-      const git = simpleGit(dir);
+      const git = readOnlyGit(dir);
       const result = await git.raw(["config", "--get", "init.defaultBranch"]);
       const trimmed = result.trim();
       if (trimmed) return trimmed;
@@ -224,7 +243,7 @@ const getDefaultBranch = async (dir: string): Promise<string> => {
 
 const getCurrentWorktree = async (dir: string): Promise<string> => {
   try {
-    const git = simpleGit(dir);
+    const git = readOnlyGit(dir);
     const result = await git.raw(["rev-parse", "--show-toplevel"]);
     return resolve(result.trim());
   } catch {
@@ -233,14 +252,13 @@ const getCurrentWorktree = async (dir: string): Promise<string> => {
 };
 
 const getWtInfo = async (
-  git: SimpleGit,
   wtPath: string,
   branch: string,
   hash: string,
-  ctx: { defaultBranch: string; isCurrent: boolean; mainRepoDir: string },
+  ctx: { defaultBranch: string; isCurrent: boolean },
 ): Promise<WtInfo | null> => {
   try {
-    const wtGit = simpleGit(wtPath);
+    const wtGit = readOnlyGit(wtPath);
     const [logResult, statusResult, upstreamRaw] = await Promise.all([
       wtGit.log({ maxCount: 1 }),
       wtGit.status(),
@@ -365,9 +383,7 @@ export const addWorktree = async (
  * worktree 内から実行した場合でも正しいメインリポジトリのパスを返す。
  */
 export const getMainWorktreePath = async (dir: string): Promise<string> => {
-  const git = simpleGit(dir);
-  const raw = await git.raw(["worktree", "list", "--porcelain"]);
-  const entries = parseWorktreePorcelain(raw);
+  const entries = await getWorktreeEntries(dir);
   return entries[0]?.path ?? dir;
 };
 
@@ -377,11 +393,10 @@ export const switchWorktree = async (
   wtBasedir: string,
   baseBranch?: string,
 ): Promise<string> => {
-  const existing = await getWtInfos(dir);
-  const found = existing.find((wt) => wt.branch === branch);
+  const existing = (await getWorktreeEntries(dir)).find((wt) => wt.branch === branch);
 
-  if (found) {
-    return found.path;
+  if (existing) {
+    return existing.path;
   }
 
   const wtDir = resolve(wtBasedir, branch);
