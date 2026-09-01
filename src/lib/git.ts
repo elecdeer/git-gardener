@@ -1,6 +1,7 @@
-import { type SimpleGit, simpleGit } from "simple-git";
-import { resolve } from "node:path";
 import { readdir, stat } from "node:fs/promises";
+import { resolve } from "node:path";
+
+import { type SimpleGit, simpleGit } from "simple-git";
 
 export interface RepoInfo {
   path: string;
@@ -320,9 +321,7 @@ const getUpstreamInfo = async (git: SimpleGit, branch: string): Promise<Upstream
   }
 };
 
-/**
- * ブランチがローカルに存在するか確認する。
- */
+/** ブランチがローカルに存在するか確認する。 */
 const localBranchExists = async (git: SimpleGit, branch: string): Promise<boolean> => {
   try {
     await git.raw(["rev-parse", "--verify", `refs/heads/${branch}`]);
@@ -332,9 +331,7 @@ const localBranchExists = async (git: SimpleGit, branch: string): Promise<boolea
   }
 };
 
-/**
- * リモートトラッキングブランチが存在するか確認する。
- */
+/** リモートトラッキングブランチが存在するか確認する。 */
 const remoteBranchExists = async (git: SimpleGit, branch: string): Promise<boolean> => {
   try {
     const result = await git.raw(["branch", "-r", "--list", `*/${branch}`]);
@@ -356,9 +353,8 @@ export const addWorktree = async (
   const isRemote = !isLocal && (await remoteBranchExists(git, branch));
 
   let args: string[];
-  if (isRemote) {
-    // リモートにのみ存在する場合は -b なしで実行。
-    // git がリモートトラッキングブランチを元にローカルブランチを自動作成する。
+  if (isLocal || isRemote) {
+    // 既存ブランチは -b なしで worktree に追加する。
     args = ["worktree", "add", wtDir, branch];
     await git.raw(args);
   } else {
@@ -368,7 +364,10 @@ export const addWorktree = async (
       args.push(baseBranch);
       // baseBranch 指定時は branch.autoSetupMerge=false を渡し、
       // 新ブランチが派生元の upstream（例: origin/main）を継承しないようにする。
-      const gitNoTrack = simpleGit({ baseDir: dir, config: ["branch.autoSetupMerge=false"] });
+      const gitNoTrack = simpleGit({
+        baseDir: dir,
+        config: ["branch.autoSetupMerge=false"],
+      });
       await gitNoTrack.raw(args);
     } else {
       await git.raw(args);
@@ -378,10 +377,7 @@ export const addWorktree = async (
   return resolve(wtDir);
 };
 
-/**
- * 指定パスが属するリポジトリのメイン worktree パスを返す。
- * worktree 内から実行した場合でも正しいメインリポジトリのパスを返す。
- */
+/** 指定パスが属するリポジトリのメイン worktree パスを返す。 worktree 内から実行した場合でも正しいメインリポジトリのパスを返す。 */
 export const getMainWorktreePath = async (dir: string): Promise<string> => {
   const entries = await getWorktreeEntries(dir);
   return entries[0]?.path ?? dir;
@@ -404,8 +400,8 @@ export const switchWorktree = async (
 };
 
 /**
- * リモートで削除済み（upstream gone）のブランチを持つ worktree を返す。
- * `fetch` が true の場合は `git fetch --all --prune` を先に実行する。
+ * リモートで削除済み（upstream gone）のブランチを持つ worktree を返す。 `fetch` が true の場合は `git fetch --all --prune`
+ * を先に実行する。
  */
 export const getPrunableWorktrees = async (
   dir: string,
