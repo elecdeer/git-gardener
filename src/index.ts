@@ -14,6 +14,7 @@ import { wtSwitchCommand } from "./commands/wt/switch.js";
 import { wtDeleteCommand } from "./commands/wt/delete.js";
 import { wtPruneCommand } from "./commands/wt/prune.js";
 import { wtMigrateCommand } from "./commands/wt/migrate.js";
+import { GdnError } from "./lib/git.js";
 
 /**
  * サブコマンドツリーの親コマンドが positional 付きで呼ばれた場合、
@@ -90,6 +91,10 @@ try {
     process.stderr.write(
       `gdn: unknown command '${name}'\nUse 'gdn --help' to see available commands.\n`,
     );
+    process.exit(1);
+  }
+  if (err instanceof GdnError) {
+    process.stderr.write(`gdn: ${err.message}\n`);
     process.exit(1);
   }
   throw err;

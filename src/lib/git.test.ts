@@ -1,4 +1,8 @@
-import { describe, test, expect, vi, beforeEach } from "vitest";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockRaw = vi.fn();
 const mockEnv = vi.fn();
@@ -12,7 +16,7 @@ vi.mock("simple-git", () => ({
   simpleGit: vi.fn(() => mockGit),
 }));
 
-import { getMainWorktreePath, addWorktree, switchWorktree } from "./git.ts";
+import { getMainWorktreePath, addWorktree, switchWorktree, GdnError } from "./git.ts";
 
 // git worktree list --porcelain の出力フォーマットを生成するヘルパー
 const porcelain = (entries: Array<{ path: string; hash: string; branch: string }>): string =>
@@ -192,5 +196,90 @@ describe("addWorktree", () => {
       "/project.wt/feat/local",
       "feat/local",
     ]);
+  });
+});
+
+describe("addWorktree（作成先パスが既に存在する場合）", () => {
+  let tmp: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    tmp = await realpath(await mkdtemp(join(tmpdir(), "gdn-git-test-")));
+  });
+
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true });
+  });
+
+  test("別ブランチの worktree が使っているパスならそのブランチ名を含む GdnError を投げ、worktree add を実行しない", async () => {
+    const wtDir = join(tmp, "project.wt", "main");
+    await mkdir(wtDir, { recursive: true });
+    await writeFile(join(wtDir, ".git"), "gitdir: /project/.git/worktrees/main\n");
+    mockRaw.mockResolvedValue(
+      porcelain([
+        { path: join(tmp, "project"), hash: "abc1234", branch: "develop" },
+        { path: wtDir, hash: "def5678", branch: "feat/other" },
+      ]),
+    );
+
+    const result = addWorktree(join(tmp, "project"), "main", wtDir);
+
+    await expect(result).rejects.toThrow(GdnError);
+    await expect(result).rejects.toThrow(
+      `cannot create worktree for 'main': '${wtDir}' is already used by the worktree for branch 'feat/other'`,
+    );
+    expect(mockRaw).not.toHaveBeenCalledWith(expect.arrayContaining(["add"]));
+  });
+
+  test("detached HEAD の worktree が使っているパスならその旨を含む GdnError を投げる", async () => {
+    const wtDir = join(tmp, "project.wt", "main");
+    await mkdir(wtDir, { recursive: true });
+    await writeFile(join(wtDir, ".git"), "gitdir: /project/.git/worktrees/main\n");
+    mockRaw.mockResolvedValue(
+      `worktree ${join(tmp, "project")}\nHEAD abc1234\nbranch refs/heads/develop\n\n` +
+        `worktree ${wtDir}\nHEAD def5678\ndetached\n`,
+    );
+
+    await expect(addWorktree(join(tmp, "project"), "main", wtDir)).rejects.toThrow(
+      "is already used by a detached HEAD worktree",
+    );
+  });
+
+  test("worktree ではない空でないディレクトリなら GdnError を投げ、worktree add を実行しない", async () => {
+    const wtDir = join(tmp, "project.wt", "main");
+    await mkdir(wtDir, { recursive: true });
+    await writeFile(join(wtDir, "file.txt"), "content\n");
+    mockRaw.mockResolvedValue(
+      porcelain([{ path: join(tmp, "project"), hash: "abc1234", branch: "develop" }]),
+    );
+
+    await expect(addWorktree(join(tmp, "project"), "main", wtDir)).rejects.toThrow(
+      `cannot create worktree for 'main': '${wtDir}' already exists and is not an empty directory`,
+    );
+    expect(mockRaw).not.toHaveBeenCalledWith(expect.arrayContaining(["add"]));
+  });
+
+  test("同名のファイルが置かれている場合も GdnError を投げる", async () => {
+    const wtDir = join(tmp, "project.wt", "main");
+    await mkdir(join(tmp, "project.wt"), { recursive: true });
+    await writeFile(wtDir, "content\n");
+    mockRaw.mockResolvedValue(
+      porcelain([{ path: join(tmp, "project"), hash: "abc1234", branch: "develop" }]),
+    );
+
+    await expect(addWorktree(join(tmp, "project"), "main", wtDir)).rejects.toThrow(GdnError);
+  });
+
+  test("空ディレクトリなら Git に任せて worktree add を実行する", async () => {
+    const wtDir = join(tmp, "project.wt", "main");
+    await mkdir(wtDir, { recursive: true });
+    mockRaw.mockImplementation(async (args: string[]) => {
+      if (args[0] === "rev-parse") return "abc1234\n";
+      return "";
+    });
+
+    await addWorktree(join(tmp, "project"), "main", wtDir);
+
+    expect(mockRaw).toHaveBeenCalledWith(["worktree", "add", wtDir, "main"]);
   });
 });

@@ -234,6 +234,27 @@ describe("gdn wt switch", () => {
 
     expect(normalize(stdout.trim())).toMatchInlineSnapshot(`"<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-c"`);
   });
+
+  it("should report a path conflict without a stack trace", async () => {
+    // worktree 作成後に中でブランチを切り替え、ディレクトリ名とブランチ名がずれた状態を作る
+    const { stdout } = await gdn(`wt create feature-d -C ${mainRepoDir}`);
+    const wtPath = stdout.trim();
+    await simpleGit(wtPath).raw(["switch", "-c", "feature-d-renamed"]);
+
+    try {
+      const { stdout: switchOut, stderr } = await gdn(`wt switch feature-d -C ${mainRepoDir}`);
+      expect(switchOut).toBe("");
+      expect(normalize(stderr.trim())).toMatchInlineSnapshot(`
+        "gdn: cannot create worktree for 'feature-d': '<testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-d' is already used by the worktree for branch 'feature-d-renamed'
+        hint: move it with 'git worktree move <testDir>/gdn-root/github.com/testuser/worktree-demo.wt/feature-d <new-path>'"
+      `);
+    } finally {
+      // 後続の prune / migrate テストに影響しないよう片付ける
+      const git = simpleGit(mainRepoDir);
+      await git.raw(["worktree", "remove", "--force", wtPath]);
+      await git.raw(["branch", "-D", "feature-d", "feature-d-renamed"]);
+    }
+  });
 });
 
 describe("gdn wt delete", () => {
