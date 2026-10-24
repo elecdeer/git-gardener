@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # mise.toml に固定した go / golangci-lint をローカルと同じバージョンで導入する
+      - name: Setup tools
+        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+
+      # fmt と lint の両方の結果を Summary に出すため、失敗しても次へ進めて最後にまとめて判定する
+      - name: Check formatting
+        id: fmt
+        continue-on-error: true
+        run: mise run fmt:check
+
+      - name: Run golangci-lint
+        id: lint
+        continue-on-error: true
+        run: mise run lint
+
+      - name: Report and fail
+        if: always()
+        env:
+          FMT_OUTCOME: ${{ steps.fmt.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+        run: |
+          FAILED=0
+          result() {
+            if [ "$2" = "success" ]; then
+              echo "| $1 | ✅ Passed |"
+            else
+              echo "| $1 | ❌ Failed (\`mise run $3\` で確認) |"
+              FAILED=1
+            fi
+          }
+          {
+            echo "## Lint Results"
+            echo "| Check | Result |"
+            echo "|-------|--------|"
+            result "Formatting" "$FMT_OUTCOME" "fmt"
+            result "golangci-lint" "$LINT_OUTCOME" "lint"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # result はサブシェルではなく現在のシェルで実行されるため FAILED が反映される
+          exit "$FAILED"
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup tools
+        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+
+      # e2e テストは実際の git を使うため、runner 標準の git をそのまま利用する
+      - name: Run tests
+        run: mise run test

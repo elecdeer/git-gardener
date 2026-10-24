@@ -1,0 +1,31 @@
+[tools]
+go = "1.27.3"
+golangci-lint = "2.15.0"
+
+[tasks.fmt]
+description = "コードを整形する"
+run = "golangci-lint fmt"
+
+[tasks."fmt:check"]
+description = "整形が必要なファイルが無いか確認する"
+run = "golangci-lint fmt --diff"
+
+[tasks.lint]
+description = "golangci-lint を実行する"
+run = "golangci-lint run"
+
+[tasks."lint:fix"]
+description = "golangci-lint の自動修正を適用する"
+run = "golangci-lint run --fix"
+
+[tasks.test]
+description = "ユニットテストと e2e テストを実行する"
+run = "go test -race ./..."
+
+[tasks.build]
+description = "gdn を dist/gdn にビルドする"
+run = "go build -o dist/gdn ./cmd/gdn"
+
+[tasks.check]
+description = "fmt:check / lint / test をまとめて実行する"
+depends = ["fmt:check", "lint", "test"]

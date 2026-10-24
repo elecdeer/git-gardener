@@ -39,8 +39,7 @@ func NewRootCommand(version string, runner git.Runner) *cobra.Command {
 		Args:    cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				//lint:ignore ST1005 利用者向けの案内文として 2 行目まで含めてそのまま表示する
-				return fmt.Errorf("unknown command '%s'\nUse 'gdn --help' to see available commands.", args[0])
+				return fmt.Errorf("unknown command '%s'\nUse 'gdn --help' to see available commands.", args[0]) //nolint:staticcheck // ST1005: 2 行目の案内文まで含めてそのまま表示する
 			}
 			return cmd.Help()
 		},
@@ -81,8 +80,7 @@ func newParentCommand(name, short string, children ...*cobra.Command) *cobra.Com
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				//lint:ignore ST1005 利用者向けの案内文として 2 行目まで含めてそのまま表示する
-				return fmt.Errorf("unknown subcommand '%s %s'\nUse 'gdn %s --help' to see available subcommands.", name, args[0], name)
+				return fmt.Errorf("unknown subcommand '%s %s'\nUse 'gdn %s --help' to see available subcommands.", name, args[0], name) //nolint:staticcheck // ST1005: 2 行目の案内文まで含めてそのまま表示する
 			}
 			return cmd.Help()
 		},

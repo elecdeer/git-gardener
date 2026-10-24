@@ -413,10 +413,16 @@ gdn complete fish > ~/.config/fish/completions/gdn.fish
 
 ## 開発
 
+開発に使うツール（Go / golangci-lint）のバージョンは `mise.toml` で固定している。
+
 ```sh
-go test ./...                          # ユニットテスト + e2e テスト（e2e はバイナリをビルドして実行）
-go run ./cmd/gdn --help
-./test/run-e2e.sh                     # Docker の Linux 環境でテスト
+mise install       # ツールを導入
+mise run check     # fmt:check / lint / test をまとめて実行
+mise run fmt       # golangci-lint fmt（gofmt + goimports）で整形
+mise run lint      # golangci-lint run（lint:fix で自動修正）
+mise run test      # ユニットテスト + e2e テスト（e2e はバイナリをビルドして実行）
+mise run build     # dist/gdn にビルド
+./test/run-e2e.sh  # Docker の Linux 環境でテスト
 ```
 
-リリースは `v*` タグの push で GoReleaser が実行される。
+PR と main への push では CI（`.github/workflows/ci.yml`）が fmt チェック・lint・テストを実行する。リリースは `v*` タグの push で GoReleaser が実行される。

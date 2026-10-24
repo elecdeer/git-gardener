@@ -27,7 +27,7 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	gdnBin = filepath.Join(dir, "gdn")
 	build := exec.Command("go", "build", "-o", gdnBin, "github.com/elecdeer/git-gardener/cmd/gdn")

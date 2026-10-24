@@ -26,7 +26,7 @@ func command(ctx context.Context, script, dir string, out io.Writer, args ...str
 func Run(ctx context.Context, hooks []string, dir string, out io.Writer) {
 	for _, h := range hooks {
 		if err := command(ctx, h, dir, out).Run(); err != nil {
-			fmt.Fprintf(out, "gdn: warning: hook failed: %s: %v\n", h, err)
+			_, _ = fmt.Fprintf(out, "gdn: warning: hook failed: %s: %v\n", h, err)
 		}
 	}
 }

@@ -20,7 +20,7 @@ func Confirm(in io.Reader, out io.Writer, question string) (bool, error) {
 	}
 	if err == io.EOF && line == "" {
 		// 改行されないまま終わるとプロンプトの後ろに続けて出力されるため改行しておく。
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes":
