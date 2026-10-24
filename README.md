@@ -7,6 +7,18 @@ ghq と git worktree を統合したようなリポジトリ管理CLI。
 
 インクリメンタルサーチはfzfなど外部ツールに委譲し、`gdn` はリスト出力と操作に専念する。
 
+## インストール
+
+[GitHub Releases](https://github.com/elecdeer/git-gardener/releases) から darwin / linux（amd64 / arm64）向けのバイナリを取得できる。
+
+```sh
+# mise
+mise use -g github:elecdeer/git-gardener
+
+# go install
+go install github.com/elecdeer/git-gardener/cmd/gdn@latest
+```
+
 ---
 
 ## コマンド一覧
@@ -37,9 +49,11 @@ gdn repo list [options]
 | `--sort <field>`      | ソートフィールド                | `updateAt` 降順         |
 | `--reverse`           | ソートを昇順にする              | false                   |
 | `--limit <n>`         | 上位n件のみ出力                 | 無制限                  |
-| `--no-color`          | ANSIカラーなしで出力            | false                   |
+| `--no-color`          | ANSIカラーなしで出力（`NO_COLOR` 環境変数でも無効化） | false |
 | `--json`              | JSON形式で出力                  | false                   |
 | `--include-worktrees` | linked worktreeもリストに含める | false                   |
+
+`--include-worktrees` で追加される行の `repo` は `gdn.root` からの相対パス（例: `github.com/user/project.wt/feature`）になる。`gdn.root` 外にある worktree は絶対パス。
 
 **`--column` で指定できるフィールド**
 
@@ -108,7 +122,8 @@ URLは `github.com/user/project` や `user/project` など省略形も受け付�
 
 既存のローカルリポジトリをgdn管理のディレクトリ構造へ移行し、`gdn.postCloneHook` を実行する。`path` 省略時はカレントディレクトリを対象とする。
 
-既存の `ghq.*` / `wt.*` 設定を検出して `gdn.*` に書き換える。
+サブディレクトリや linked worktree から実行した場合もリポジトリ全体を移動し、移動後に `git worktree repair` で linked worktree からの参照を修復する。
+リポジトリのローカル設定にある `wt.basedir` / `wt.hook` / `wt.deleteHook` / `wt.remover` を対応する `gdn.*` に移行する（移行先が設定済みならスキップ、旧キーは残す）。
 
 ```sh
 gdn repo migrate [path] [options]
@@ -152,7 +167,7 @@ gdn wt list [options]
 | `--no-color`         | ANSIカラーなしで出力                             | false                                        |
 | `--json`             | JSON形式で出力                                   | false                                        |
 | `-C, --dir <path>`   | 対象リポジトリのパス                             | カレントディレクトリ                         |
-| `--include-branches` | worktreeに紐づいていないローカルブランチも含める | false                                        |
+| `--include-branches` | worktreeに紐づいていないローカルブランチも含める（`path` / `status` は空） | false |
 
 **`--column` で指定できるフィールド**
 
@@ -167,7 +182,7 @@ gdn wt list [options]
 | `tracking`         | upstream追跡状態（⇡/⇣）— `ahead`/`behind` の視覚表現 | あり |
 | `commitMessage`    | 最新コミットのサブジェクト                           | あり |
 | `status`           | working tree状態（`clean` / `dirty`）                | あり |
-| `isMain`           | main worktreeかどうか（`✓` / 空）                    | なし |
+| `isMain`           | メインworktree（`git worktree list` の先頭）かどうか（`✓` / 空） | なし |
 | `isCurrent`        | カレントworktreeかどうか（`✓` / 空）                 | なし |
 | `updateAt`         | 最終コミットのunix timestamp                         | なし |
 | `updateAtRelative` | 最終コミットの相対時刻                               | あり |
@@ -207,7 +222,7 @@ cd $(gdn wt root)
 
 #### `gdn wt switch <branch>`
 
-指定ブランチのworktreeへ切り替える。worktreeが存在しない場合は作成する。worktreeの絶対パスをstdoutに出力する。
+指定ブランチのworktreeへ切り替える。worktreeが存在しない場合は `<gdn.wtBasedir>/<branch>` に作成し、`gdn.wtHook` を実行する。worktreeの絶対パスをstdoutに出力する。
 
 ```sh
 gdn wt switch <branch> [options]
@@ -234,7 +249,7 @@ function gwt() {
 
 #### `gdn wt create <branch>`
 
-worktreeを新規作成する。既存ブランチ・worktreeがある場合はエラー。worktreeの絶対パスをstdoutに出力する。
+worktreeを `<gdn.wtBasedir>/<branch>` に新規作成し、`gdn.wtHook` を実行する。ブランチがローカルまたはリモートに既にあればそれを使い、無ければ `--base` から作成する。そのブランチのworktreeが既にある場合はエラー。worktreeの絶対パスをstdoutに出力する。
 
 ```sh
 gdn wt create <branch> [options]
@@ -251,7 +266,7 @@ gdn wt create <branch> [options]
 
 #### `gdn wt delete <branch>`
 
-worktreeとブランチを削除する。デフォルトブランチ（main等）は削除保護される。
+`gdn.wtDeleteHook` を実行したうえでworktreeとブランチを削除する。デフォルトブランチ（main等）とメインworktreeは削除保護される。未マージのためブランチを削除できなかった場合はworktreeだけ削除して警告する。
 
 ```sh
 gdn wt delete <branch> [options]
@@ -261,14 +276,14 @@ gdn wt delete <branch> [options]
 
 | オプション         | 内容                                                 |
 | ------------------ | ---------------------------------------------------- |
-| `--force`          | 未マージでも強制削除                                 |
+| `--force`          | 未コミットの変更や未マージのコミットがあっても強制削除 |
 | `-C, --dir <path>` | 対象リポジトリのパス（省略時はカレントディレクトリ） |
 
 ---
 
 #### `gdn wt prune`
 
-対象リポジトリのマージ済みブランチのworktreeとブランチを一括削除する。
+upstreamがリモートで削除済み（`[gone]`）のブランチについて、worktreeとローカルブランチを一括削除する。判定前に `git fetch --all --prune` を実行する。メインworktreeとデフォルトブランチは対象外。未コミットの変更があるなどで削除できないworktreeは警告してスキップする。
 
 ```sh
 gdn wt prune [options]
@@ -280,13 +295,14 @@ gdn wt prune [options]
 | ------------------ | ---------------------------------------------------- |
 | `--dry-run`        | 実際には削除せず対象を表示                           |
 | `--yes` / `-y`     | 確認プロンプトをスキップ                             |
+| `--no-fetch`       | 判定前の `git fetch --all --prune` を行わない        |
 | `-C, --dir <path>` | 対象リポジトリのパス（省略時はカレントディレクトリ） |
 
 ---
 
 #### `gdn wt migrate`
 
-既存リポジトリのworktreeを `gdn.wtBasedir` 配下の正規化された構造へ移行する。bare リポジトリにも対応。
+既存リポジトリのlinked worktreeを `git worktree move` で `<gdn.wtBasedir>/<branch>` へ移行する。detached HEAD のworktreeは対象外。
 
 ```sh
 gdn wt migrate [options]
@@ -306,17 +322,7 @@ After:
   ~/project.wt/feature-branch/   移動
 ```
 
-bare リポジトリ:
-
-```
-Before:
-  ~/project.git/           bare repo
-  ~/project.git/.wt/feature-branch/
-
-After:
-  ~/project/               新規作成（non-bare、デフォルトブランチをcheckout）
-  ~/project.wt/feature-branch/   移動
-```
+bare リポジトリの移行は未対応。
 
 **オプション**
 
@@ -330,7 +336,7 @@ After:
 
 ## シェル補完
 
-`gdn complete <shell>` でシェル補完スクリプトを生成できる。
+`gdn complete <shell>`（`bash` / `zsh` / `fish` / `powershell`）でシェル補完スクリプトを生成できる。`gdn wt switch` / `gdn wt delete` ではブランチ名も補完される。
 
 ### zsh
 
@@ -365,7 +371,7 @@ gdn complete fish > ~/.config/fish/completions/gdn.fish
 
 ## 設定（git config）
 
-すべての設定は `gdn.*` 名前空間で管理する。グローバル設定（`~/.gitconfig`）またはリポジトリ設定（`.git/config`）に記述できる。
+すべての設定は `gdn.*` 名前空間で管理する。リポジトリ管理の設定はグローバル設定（`~/.gitconfig`）のみ、worktree管理の設定はグローバル設定とリポジトリ設定（`.git/config`）の両方から読む。
 
 ### リポジトリ管理
 
@@ -386,6 +392,10 @@ gdn complete fish > ~/.config/fish/completions/gdn.fish
 
 `{gitroot}` はリポジトリのルートディレクトリ名に展開される。
 
+フックは `sh -c` で実行されるため、パイプやリダイレクトなどのシェル構文を使える。`postCloneHook` はクローン先、`wtHook` / `wtDeleteHook` は対象worktreeのディレクトリで実行される。フックの出力はstderrに流れ（stdoutはパス出力専用）、失敗しても警告を出して処理を続ける。
+
+`gdn.wtRemover` を設定した場合は、worktreeのパスを末尾の引数として渡して実行し、その後 `git worktree prune` で git の管理情報を削除する。
+
 ### 設定例
 
 ```ini
@@ -398,3 +408,21 @@ gdn complete fish > ~/.config/fish/completions/gdn.fish
     wtHook = pnpm install
     wtRemover = trash-put
 ```
+
+---
+
+## 開発
+
+開発に使うツール（Go / golangci-lint）のバージョンは `mise.toml` で固定している。
+
+```sh
+mise install       # ツールを導入
+mise run check     # fmt:check / lint / test をまとめて実行
+mise run fmt       # golangci-lint fmt（gofmt + goimports）で整形
+mise run lint      # golangci-lint run（lint:fix で自動修正）
+mise run test      # ユニットテスト + e2e テスト（e2e はバイナリをビルドして実行）
+mise run build     # dist/gdn にビルド
+./test/run-e2e.sh  # Docker の Linux 環境でテスト
+```
+
+PR と main への push では CI（`.github/workflows/ci.yml`）が fmt チェック・lint・テストを実行する。リリースは `v*` タグの push で GoReleaser が実行される。
