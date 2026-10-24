@@ -16,94 +16,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    # darwin 向け SEA バイナリは codesign が必要なため macOS runner で実行する
-    runs-on: macos-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    outputs:
-      tag: ${{ steps.resolve-tag.outputs.tag }}
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Resolve release tag
-        id: resolve-tag
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ -n "$INPUT_TAG" ]; then
-            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version-file: package.json
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build release binaries
-        run: pnpm run build:release
-
-      - name: Rename and stage artifacts
-        env:
-          TAG: ${{ steps.resolve-tag.outputs.tag }}
-        run: |
-          mkdir -p artifacts
-          cp build/index-darwin-arm64 "artifacts/git-gardener-${TAG}-darwin-arm64"
-          cp build/index-darwin-x64   "artifacts/git-gardener-${TAG}-darwin-x64"
-          cd artifacts
-          shasum -a 256 git-gardener-* > checksums.txt
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-binaries
-          path: artifacts/
-          if-no-files-found: error
-          retention-days: 7
-
   release:
-    needs: build
+    # Go はクロスコンパイルできるため、darwin 向けも Linux runner でビルドする
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      # workflow_dispatch の場合も指定タグをチェックアウトし、GoReleaser がそのタグでリリースするようにする。
+      # changelog 生成のため全履歴を取得する。
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          name: release-binaries
-          path: artifacts
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          fetch-depth: 0
 
-      - name: Create or update GitHub Release
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.build.outputs.tag }}
-        run: |
-          # 既存リリースがあればアセットを追加、無ければ新規作成する
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" artifacts/* --clobber
-          else
-            gh release create "$TAG" \
-              --title "$TAG" \
-              --generate-notes \
-              artifacts/*
-          fi
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
         env:
-          TAG: ${{ needs.build.outputs.tag }}
+          TAG: ${{ inputs.tag || github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           {
