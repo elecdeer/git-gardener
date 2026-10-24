@@ -1,7 +1,12 @@
-import { readdir, stat } from "node:fs/promises";
+import { readdir, realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { type SimpleGit, simpleGit } from "simple-git";
+
+/** 利用者の操作で解消できる失敗を表す。CLI はスタックトレースを出さずにメッセージだけを表示する。 */
+export class GdnError extends Error {
+  override name = "GdnError";
+}
 
 export interface RepoInfo {
   path: string;
@@ -341,12 +346,55 @@ const remoteBranchExists = async (git: SimpleGit, branch: string): Promise<boole
   }
 };
 
+/** パスを実体パスに解決する。存在しない場合は resolve したパスを返す。 */
+const realpathOrResolve = async (path: string): Promise<string> => {
+  try {
+    return await realpath(path);
+  } catch {
+    return resolve(path);
+  }
+};
+
+/**
+ * 作成先の worktree パスが使用可能か確認し、使用できない場合は GdnError を投げる。 Git は空ディレクトリへの `worktree add`
+ * を許可するため、中身があるディレクトリだけを衝突とみなす。 作成先が別ブランチの worktree として使われている場合（worktree
+ * 内でブランチを切り替えた場合など）は、そのブランチ名をメッセージに含める。
+ */
+const assertWtDirAvailable = async (dir: string, branch: string, wtDir: string): Promise<void> => {
+  try {
+    const names = await readdir(wtDir);
+    if (names.length === 0) return;
+  } catch (err) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") return;
+    // ファイルが置かれている（ENOTDIR）などディレクトリとして読めない場合も衝突として扱う
+  }
+
+  const resolvedWtDir = await realpathOrResolve(wtDir);
+  for (const entry of await getWorktreeEntries(dir)) {
+    if ((await realpathOrResolve(entry.path)) !== resolvedWtDir) continue;
+    const usedBy =
+      entry.branch === "HEAD"
+        ? "a detached HEAD worktree"
+        : `the worktree for branch '${entry.branch}'`;
+    throw new GdnError(
+      `cannot create worktree for '${branch}': '${wtDir}' is already used by ${usedBy}\n` +
+        `hint: move it with 'git worktree move ${wtDir} <new-path>'`,
+    );
+  }
+
+  throw new GdnError(
+    `cannot create worktree for '${branch}': '${wtDir}' already exists and is not an empty directory`,
+  );
+};
+
 export const addWorktree = async (
   dir: string,
   branch: string,
   wtDir: string,
   baseBranch?: string,
 ): Promise<string> => {
+  await assertWtDirAvailable(dir, branch, wtDir);
+
   const git = simpleGit(dir);
 
   const isLocal = await localBranchExists(git, branch);
